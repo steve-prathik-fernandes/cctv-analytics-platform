@@ -1,0 +1,20 @@
+# Default profile targets PostgreSQL (see docker-compose.yml).
+# For a zero-setup local run without Docker, start with: --spring.profiles.active=dev
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/cctv}
+    username: ${DB_USER:cctv}
+    password: ${DB_PASSWORD:cctv}
+  jpa:
+    hibernate:
+      ddl-auto: update   # dev convenience; replace with Flyway migrations before deployment
+    open-in-view: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+server:
+  port: 8080

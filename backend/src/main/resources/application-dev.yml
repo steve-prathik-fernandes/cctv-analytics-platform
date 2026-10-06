@@ -1,0 +1,9 @@
+# In-memory H2 so the backend runs without Postgres or Docker.
+spring:
+  datasource:
+    url: jdbc:h2:mem:cctv;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop

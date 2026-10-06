@@ -1,0 +1,3 @@
+-r requirements.txt
+# Heavy dependencies (pulls in PyTorch). Install separately so CI and quick runs stay fast.
+ultralytics>=8.3

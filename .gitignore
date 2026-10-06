@@ -1,0 +1,29 @@
+# Java / Maven
+backend/target/
+*.class
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.pt
+
+# Node
+node_modules/
+frontend/dist/
+
+# Secrets and local config
+.env
+*.pem
+
+# IDE / OS
+.idea/
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+
+# Data and footage (never commit video)
+data/
+*.mp4
+*.avi
