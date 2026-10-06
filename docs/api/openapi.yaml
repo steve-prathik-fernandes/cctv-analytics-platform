@@ -1,0 +1,972 @@
+openapi: 3.0.3
+info:
+  title: Smart CCTV Analytics Platform API
+  version: 0.1.0
+  description: |
+    REST API for the dashboard (`/api/...`) and for the detection service callbacks (`/internal/...`).
+
+    All `/api` endpoints except login require a bearer token. Errors use the RFC 7807
+    problem format. Times are UTC ISO 8601.
+
+    Roles: `ADMIN` can call everything. `OPERATOR` can call endpoints marked for operators,
+    and only sees cameras assigned to them.
+servers:
+  - url: http://localhost:8080
+    description: Local development
+tags:
+  - name: Auth
+  - name: Users
+  - name: Cameras
+  - name: Zones and rules
+  - name: Footage
+  - name: Events
+  - name: Audit
+  - name: Internal
+
+security:
+  - bearerAuth: []
+
+paths:
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Token issued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /api/auth/me:
+    get:
+      tags: [Auth]
+      summary: Current user
+      responses:
+        '200':
+          description: The signed-in user
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/users:
+    get:
+      tags: [Users]
+      summary: List users (admin)
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Page of users
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Users]
+      summary: Create a user (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/users/{userId}:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    patch:
+      tags: [Users]
+      summary: Update a user, including enabling or disabling (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserUpdate' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/users/{userId}/cameras:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    put:
+      tags: [Users]
+      summary: Replace the cameras an operator can access (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cameraIds]
+              properties:
+                cameraIds:
+                  type: array
+                  items: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: Access updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cameraIds:
+                    type: array
+                    items: { type: integer, format: int64 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/cameras:
+    get:
+      tags: [Cameras]
+      summary: List cameras the caller can access (operator)
+      responses:
+        '200':
+          description: Cameras
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Camera' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Cameras]
+      summary: Create a camera (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CameraInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Camera' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/cameras/{cameraId}:
+    parameters:
+      - $ref: '#/components/parameters/CameraId'
+    get:
+      tags: [Cameras]
+      summary: Get a camera (operator)
+      responses:
+        '200':
+          description: The camera
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Camera' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Cameras]
+      summary: Update a camera (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CameraInput' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Camera' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Cameras]
+      summary: Delete a camera (admin)
+      description: Fails with 409 if the camera has footage, unless `deleteFootage=true`.
+      parameters:
+        - name: deleteFootage
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/cameras/{cameraId}/zones:
+    parameters:
+      - $ref: '#/components/parameters/CameraId'
+    get:
+      tags: [Zones and rules]
+      summary: List zones of a camera (operator)
+      responses:
+        '200':
+          description: Zones
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Zone' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Zones and rules]
+      summary: Create a zone (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ZoneInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Zone' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/zones/{zoneId}:
+    parameters:
+      - name: zoneId
+        in: path
+        required: true
+        schema: { type: integer, format: int64 }
+    delete:
+      tags: [Zones and rules]
+      summary: Delete a zone (admin)
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/cameras/{cameraId}/rules:
+    parameters:
+      - $ref: '#/components/parameters/CameraId'
+    get:
+      tags: [Zones and rules]
+      summary: List event rules of a camera (operator)
+      responses:
+        '200':
+          description: Rules
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Rule' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Zones and rules]
+      summary: Create an event rule (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RuleInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Rule' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/rules/{ruleId}:
+    parameters:
+      - name: ruleId
+        in: path
+        required: true
+        schema: { type: integer, format: int64 }
+    put:
+      tags: [Zones and rules]
+      summary: Update an event rule (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RuleInput' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Rule' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Zones and rules]
+      summary: Delete an event rule (admin)
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/cameras/{cameraId}/videos:
+    parameters:
+      - $ref: '#/components/parameters/CameraId'
+    post:
+      tags: [Footage]
+      summary: Upload footage for a camera and start processing (operator)
+      description: |
+        Accepts MP4 files up to the configured size limit. The file is validated, stored,
+        and a processing job is queued. Returns immediately; poll the job for status.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, recordedStartAt]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                recordedStartAt:
+                  type: string
+                  format: date-time
+                  description: When the footage was recorded. Event times are derived from this.
+      responses:
+        '202':
+          description: Accepted for processing
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UploadResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413':
+          description: File exceeds the size limit
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '415':
+          description: File type not allowed
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /api/videos/{videoId}:
+    parameters:
+      - name: videoId
+        in: path
+        required: true
+        schema: { type: integer, format: int64 }
+    get:
+      tags: [Footage]
+      summary: Get video details (operator)
+      responses:
+        '200':
+          description: The video
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Video' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Footage]
+      summary: Delete a video with its events, clips and thumbnails (admin)
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/jobs/{jobId}:
+    parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema: { type: integer, format: int64 }
+    get:
+      tags: [Footage]
+      summary: Get processing job status (operator)
+      responses:
+        '200':
+          description: The job
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Job' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/events:
+    get:
+      tags: [Events]
+      summary: Search events (operator)
+      description: Results are limited to cameras the caller can access.
+      parameters:
+        - name: cameraId
+          in: query
+          schema: { type: integer, format: int64 }
+        - name: eventType
+          in: query
+          schema: { $ref: '#/components/schemas/EventType' }
+        - name: objectLabel
+          in: query
+          schema: { $ref: '#/components/schemas/ObjectLabel' }
+        - name: from
+          in: query
+          description: Start of time range (inclusive)
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          description: End of time range (exclusive)
+          schema: { type: string, format: date-time }
+        - name: minConfidence
+          in: query
+          schema: { type: number, format: float, minimum: 0, maximum: 1 }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: ["startedAt,desc", "startedAt,asc", "confidence,desc"]
+            default: "startedAt,desc"
+      responses:
+        '200':
+          description: Page of events
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/events/{eventId}:
+    parameters:
+      - $ref: '#/components/parameters/EventId'
+    get:
+      tags: [Events]
+      summary: Get one event (operator)
+      responses:
+        '200':
+          description: The event
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Event' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/events/{eventId}/clip:
+    parameters:
+      - $ref: '#/components/parameters/EventId'
+    get:
+      tags: [Events]
+      summary: Play the event clip (operator)
+      description: Redirects to a short-lived signed link. The view is written to the audit log.
+      responses:
+        '302':
+          description: Redirect to the signed clip link
+          headers:
+            Location:
+              schema: { type: string, format: uri }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/events/{eventId}/thumbnail:
+    parameters:
+      - $ref: '#/components/parameters/EventId'
+    get:
+      tags: [Events]
+      summary: Get the event thumbnail (operator)
+      responses:
+        '302':
+          description: Redirect to the signed thumbnail link
+          headers:
+            Location:
+              schema: { type: string, format: uri }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/audit-logs:
+    get:
+      tags: [Audit]
+      summary: Search the audit log (admin)
+      parameters:
+        - name: userId
+          in: query
+          schema: { type: integer, format: int64 }
+        - name: action
+          in: query
+          schema: { type: string }
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Page of audit entries
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuditLogPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /internal/jobs/{jobId}/status:
+    parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema: { type: integer, format: int64 }
+    post:
+      tags: [Internal]
+      summary: Detection service reports job status
+      description: Not reachable from browsers. Requires the service token.
+      security:
+        - serviceToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [RUNNING, FAILED]
+                error:
+                  type: string
+                  description: Reason, when status is FAILED
+      responses:
+        '204': { description: Recorded }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /internal/jobs/{jobId}/events:
+    parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema: { type: integer, format: int64 }
+    post:
+      tags: [Internal]
+      summary: Detection service submits results
+      description: |
+        Stores the events and marks the job DONE. Sending again replaces the job's
+        previous events, so retries are safe. Not reachable from browsers.
+      security:
+        - serviceToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [events]
+              properties:
+                events:
+                  type: array
+                  items: { $ref: '#/components/schemas/EventSubmission' }
+      responses:
+        '204': { description: Stored }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    serviceToken:
+      type: apiKey
+      in: header
+      name: X-Service-Token
+
+  parameters:
+    Page:
+      name: page
+      in: query
+      description: Zero-based page number
+      schema: { type: integer, minimum: 0, default: 0 }
+    Size:
+      name: size
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema: { type: integer, format: int64 }
+    CameraId:
+      name: cameraId
+      in: path
+      required: true
+      schema: { type: integer, format: int64 }
+    EventId:
+      name: eventId
+      in: path
+      required: true
+      schema: { type: integer, format: int64 }
+
+  responses:
+    BadRequest:
+      description: Invalid input
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Unauthorized:
+      description: Missing, invalid or expired credentials
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Forbidden:
+      description: Authenticated, but not allowed to do this
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    NotFound:
+      description: Does not exist, or not visible to the caller
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Conflict:
+      description: Conflicts with existing data
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    TooManyRequests:
+      description: Too many failed attempts
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+    Problem:
+      type: object
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        errors:
+          type: array
+          description: Field-level validation errors
+          items:
+            type: object
+            properties:
+              field: { type: string }
+              message: { type: string }
+
+    Role:
+      type: string
+      enum: [ADMIN, OPERATOR]
+
+    EventType:
+      type: string
+      enum: [OBJECT_DETECTED, LOITERING, ZONE_ENTRY, AFTER_HOURS_VEHICLE]
+
+    ObjectLabel:
+      type: string
+      enum: [person, car, motorcycle, bus, truck]
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, format: password }
+
+    LoginResponse:
+      type: object
+      properties:
+        accessToken: { type: string }
+        tokenType: { type: string, example: Bearer }
+        expiresInSeconds: { type: integer, example: 3600 }
+        user: { $ref: '#/components/schemas/User' }
+
+    User:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        email: { type: string, format: email }
+        displayName: { type: string }
+        role: { $ref: '#/components/schemas/Role' }
+        enabled: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        lastLoginAt: { type: string, format: date-time, nullable: true }
+
+    UserCreate:
+      type: object
+      required: [email, password, displayName, role]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, format: password, minLength: 12 }
+        displayName: { type: string }
+        role: { $ref: '#/components/schemas/Role' }
+
+    UserUpdate:
+      type: object
+      properties:
+        displayName: { type: string }
+        role: { $ref: '#/components/schemas/Role' }
+        enabled: { type: boolean }
+        password: { type: string, format: password, minLength: 12 }
+
+    UserPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items: { $ref: '#/components/schemas/User' }
+        page: { type: integer }
+        size: { type: integer }
+        totalElements: { type: integer, format: int64 }
+        totalPages: { type: integer }
+
+    Camera:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        location: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    CameraInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        location: { type: string, maxLength: 200 }
+
+    Polygon:
+      type: array
+      description: Points as [x, y] with values from 0 to 1, relative to frame width and height.
+      minItems: 3
+      items:
+        type: array
+        minItems: 2
+        maxItems: 2
+        items: { type: number, minimum: 0, maximum: 1 }
+
+    Zone:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        cameraId: { type: integer, format: int64 }
+        name: { type: string }
+        polygon: { $ref: '#/components/schemas/Polygon' }
+
+    ZoneInput:
+      type: object
+      required: [name, polygon]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        polygon: { $ref: '#/components/schemas/Polygon' }
+
+    RuleType:
+      type: string
+      enum: [LOITERING, ZONE_ENTRY, AFTER_HOURS_VEHICLE]
+
+    Rule:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        cameraId: { type: integer, format: int64 }
+        zoneId: { type: integer, format: int64, nullable: true }
+        type: { $ref: '#/components/schemas/RuleType' }
+        params:
+          type: object
+          additionalProperties: true
+          example: { minSeconds: 30 }
+        enabled: { type: boolean }
+
+    RuleInput:
+      type: object
+      required: [type, params]
+      properties:
+        zoneId:
+          type: integer
+          format: int64
+          nullable: true
+          description: Required for LOITERING and ZONE_ENTRY
+        type: { $ref: '#/components/schemas/RuleType' }
+        params:
+          type: object
+          additionalProperties: true
+          description: |
+            LOITERING: `{ "minSeconds": 30 }`.
+            ZONE_ENTRY: `{}`.
+            AFTER_HOURS_VEHICLE: `{ "start": "22:00", "end": "06:00" }`.
+        enabled: { type: boolean, default: true }
+
+    Video:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        cameraId: { type: integer, format: int64 }
+        originalFilename: { type: string }
+        sizeBytes: { type: integer, format: int64 }
+        durationSeconds: { type: number, format: float, nullable: true }
+        recordedStartAt: { type: string, format: date-time }
+        uploadedAt: { type: string, format: date-time }
+        uploadedBy: { type: integer, format: int64 }
+
+    JobStatus:
+      type: string
+      enum: [QUEUED, RUNNING, DONE, FAILED]
+
+    Job:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        videoId: { type: integer, format: int64 }
+        status: { $ref: '#/components/schemas/JobStatus' }
+        eventCount: { type: integer, nullable: true }
+        error: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        startedAt: { type: string, format: date-time, nullable: true }
+        finishedAt: { type: string, format: date-time, nullable: true }
+
+    UploadResult:
+      type: object
+      properties:
+        video: { $ref: '#/components/schemas/Video' }
+        job: { $ref: '#/components/schemas/Job' }
+
+    BoundingBox:
+      type: object
+      description: Normalized 0 to 1 relative to the frame.
+      properties:
+        x: { type: number }
+        y: { type: number }
+        width: { type: number }
+        height: { type: number }
+
+    Event:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        cameraId: { type: integer, format: int64 }
+        videoId: { type: integer, format: int64 }
+        jobId: { type: integer, format: int64 }
+        eventType: { $ref: '#/components/schemas/EventType' }
+        objectLabel: { $ref: '#/components/schemas/ObjectLabel' }
+        trackId: { type: integer }
+        confidence: { type: number, format: float }
+        startedAt: { type: string, format: date-time }
+        endedAt: { type: string, format: date-time }
+        zoneId: { type: integer, format: int64, nullable: true }
+        ruleId: { type: integer, format: int64, nullable: true }
+        bbox: { $ref: '#/components/schemas/BoundingBox' }
+        thumbnailUrl:
+          type: string
+          description: Path to the thumbnail endpoint for this event
+          example: /api/events/812/thumbnail
+        clipUrl:
+          type: string
+          description: Path to the clip endpoint for this event
+          example: /api/events/812/clip
+
+    EventPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items: { $ref: '#/components/schemas/Event' }
+        page: { type: integer }
+        size: { type: integer }
+        totalElements: { type: integer, format: int64 }
+        totalPages: { type: integer }
+
+    EventSubmission:
+      type: object
+      required: [eventType, objectLabel, trackId, confidence, videoOffsetStartMs, videoOffsetEndMs]
+      properties:
+        eventType: { $ref: '#/components/schemas/EventType' }
+        objectLabel: { $ref: '#/components/schemas/ObjectLabel' }
+        trackId: { type: integer }
+        confidence: { type: number, format: float }
+        videoOffsetStartMs: { type: integer }
+        videoOffsetEndMs: { type: integer }
+        bbox: { $ref: '#/components/schemas/BoundingBox' }
+        zoneId: { type: integer, format: int64, nullable: true }
+        ruleId: { type: integer, format: int64, nullable: true }
+        thumbnailKey: { type: string }
+        clipKey: { type: string }
+
+    AuditLog:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        userId: { type: integer, format: int64, nullable: true }
+        action:
+          type: string
+          example: EVENT_SEARCH
+        resourceType: { type: string, nullable: true }
+        resourceId: { type: integer, format: int64, nullable: true }
+        ipAddress: { type: string, nullable: true }
+        details:
+          type: object
+          additionalProperties: true
+          nullable: true
+        createdAt: { type: string, format: date-time }
+
+    AuditLogPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items: { $ref: '#/components/schemas/AuditLog' }
+        page: { type: integer }
+        size: { type: integer }
+        totalElements: { type: integer, format: int64 }
+        totalPages: { type: integer }
