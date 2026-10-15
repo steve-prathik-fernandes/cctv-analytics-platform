@@ -7,8 +7,25 @@ spring:
     password: ${DB_PASSWORD:cctv}
   jpa:
     hibernate:
-      ddl-auto: update   # dev convenience; replace with Flyway migrations before deployment
+      ddl-auto: validate   # schema is owned by Flyway (src/main/resources/db/migration)
     open-in-view: false
+  flyway:
+    placeholders:
+      json_type: jsonb
+  mvc:
+    problemdetails:
+      enabled: true
+
+app:
+  auth:
+    # No default: the API will not start without a secret of at least 32 characters.
+    jwt-secret: ${JWT_SECRET}
+    token-ttl: 60m
+    max-failed-logins: 5
+    failed-login-window: 15m
+    bootstrap-admin:
+      email: ${ADMIN_EMAIL:}
+      password: ${ADMIN_PASSWORD:}
 
 management:
   endpoints:

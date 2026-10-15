@@ -21,8 +21,17 @@ Prerequisites: JDK 21, Maven 3.9+, Node 22+, Python 3.12+.
 cd backend
 mvn spring-boot:run -Dspring-boot.run.profiles=dev
 # http://localhost:8080/actuator/health
-# http://localhost:8080/api/cameras
 ```
+
+The dev profile creates an admin account on startup: `admin@cctv.local` / `admin-dev-password`. These credentials exist only in the dev profile and in `docker-compose.yml`.
+
+Outside the dev profile the backend needs these environment variables:
+
+| Variable | Purpose |
+|---|---|
+| `JWT_SECRET` | Signing key for login tokens, at least 32 characters. The API will not start without it. |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Creates the first admin when the database has no users. Ignored afterwards. |
+| `DB_URL`, `DB_USER`, `DB_PASSWORD` | PostgreSQL connection. |
 
 **Frontend:**
 
@@ -64,5 +73,5 @@ docs/           Charter and project plan
 
 ## Status
 
-Week 1 scaffold: camera list/create endpoint, health checks, CI, container setup.
-Next: requirements doc, ER diagram, API contract (see the Trello board).
+Weeks 1 to 3: design documents, Flyway database schema, login with JWT and BCrypt, admin and operator roles, per-camera access for operators, user management API, audit log. The dashboard has a login screen and the camera list.
+Next: AWS deployment, footage upload and the detection job flow (see the Trello board).

@@ -1,66 +1,107 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import './App.css'
+import { api, getToken, setToken, setUnauthorizedHandler, type User } from './api'
+import Login from './Login'
 
 interface Camera {
   id: number
   name: string
   location: string | null
-  sourceUrl: string | null
+  createdAt: string
 }
 
 function App() {
-  const [cameras, setCameras] = useState<Camera[]>([])
-  const [name, setName] = useState('')
-  const [location, setLocation] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const [user, setUser] = useState<User | null>(null)
+  // True until we know whether a saved token is still valid.
+  const [checking, setChecking] = useState(() => getToken() !== null)
 
-  async function load() {
-    try {
-      const res = await fetch('/api/cameras')
-      if (!res.ok) throw new Error(`Backend returned ${res.status}`)
-      setCameras(await res.json())
-      setError(null)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not reach the backend')
-    }
-  }
-
-  useEffect(() => {
-    load()
+  const logout = useCallback(() => {
+    setToken(null)
+    setUser(null)
   }, [])
 
-  async function addCamera(e: React.FormEvent) {
-    e.preventDefault()
-    if (!name.trim()) return
-    const res = await fetch('/api/cameras', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, location }),
-    })
-    if (!res.ok) {
-      setError(`Could not add camera (${res.status})`)
-      return
-    }
-    setName('')
-    setLocation('')
-    load()
-  }
+  useEffect(() => {
+    setUnauthorizedHandler(logout)
+    if (!getToken()) return
+    api<User>('/api/auth/me')
+      .then(setUser)
+      .catch(() => logout())
+      .finally(() => setChecking(false))
+  }, [logout])
 
   return (
     <main style={{ maxWidth: 640, margin: '0 auto', padding: '2rem 1rem', textAlign: 'left' }}>
       <h1>Smart CCTV Analytics Platform</h1>
+      {checking ? (
+        <p>Loading…</p>
+      ) : user ? (
+        <>
+          <p style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span>
+              Signed in as <strong>{user.displayName}</strong> ({user.role.toLowerCase()})
+            </span>
+            <button type="button" onClick={logout}>Log out</button>
+          </p>
+          <Cameras isAdmin={user.role === 'ADMIN'} />
+        </>
+      ) : (
+        <Login onLogin={setUser} />
+      )}
+    </main>
+  )
+}
+
+function Cameras({ isAdmin }: { isAdmin: boolean }) {
+  const [cameras, setCameras] = useState<Camera[]>([])
+  const [name, setName] = useState('')
+  const [location, setLocation] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [loaded, setLoaded] = useState(false)
+
+  const load = useCallback(async () => {
+    try {
+      setCameras(await api<Camera[]>('/api/cameras'))
+      setError(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load cameras')
+    } finally {
+      setLoaded(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  async function addCamera(e: React.FormEvent) {
+    e.preventDefault()
+    if (!name.trim()) return
+    try {
+      await api<Camera>('/api/cameras', { method: 'POST', body: JSON.stringify({ name, location }) })
+      setName('')
+      setLocation('')
+      load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not add camera')
+    }
+  }
+
+  return (
+    <section>
       <h2>Cameras</h2>
 
-      {error && <p role="alert">Backend not reachable: {error}</p>}
+      {error && <p role="alert">{error}</p>}
 
-      <form onSubmit={addCamera} style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-        <input id="camera-name" placeholder="Camera name" value={name} onChange={(e) => setName(e.target.value)} />
-        <input id="camera-location" placeholder="Location" value={location} onChange={(e) => setLocation(e.target.value)} />
-        <button type="submit">Add camera</button>
-      </form>
+      {isAdmin && (
+        <form onSubmit={addCamera} style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+          <input id="camera-name" placeholder="Camera name" value={name} onChange={(e) => setName(e.target.value)} />
+          <input id="camera-location" placeholder="Location" value={location} onChange={(e) => setLocation(e.target.value)} />
+          <button type="submit">Add camera</button>
+        </form>
+      )}
 
-      {cameras.length === 0 && !error ? (
-        <p>No cameras yet. Add one above.</p>
+      {loaded && cameras.length === 0 && !error ? (
+        <p>{isAdmin ? 'No cameras yet. Add one above.' : 'No cameras are assigned to you yet. Ask an admin for access.'}</p>
       ) : (
         <ul>
           {cameras.map((c) => (
@@ -71,7 +112,7 @@ function App() {
           ))}
         </ul>
       )}
-    </main>
+    </section>
   )
 }
 

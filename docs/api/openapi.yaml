@@ -683,7 +683,7 @@ components:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
     TooManyRequests:
-      description: Too many failed attempts
+      description: Too many failed login attempts for this email (5 within 15 minutes). Retry after the window passes.
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
@@ -723,7 +723,7 @@ components:
       required: [email, password]
       properties:
         email: { type: string, format: email }
-        password: { type: string, format: password }
+        password: { type: string, format: password, maxLength: 72 }
 
     LoginResponse:
       type: object
@@ -749,7 +749,7 @@ components:
       required: [email, password, displayName, role]
       properties:
         email: { type: string, format: email }
-        password: { type: string, format: password, minLength: 12 }
+        password: { type: string, format: password, minLength: 12, maxLength: 72 }
         displayName: { type: string }
         role: { $ref: '#/components/schemas/Role' }
 
@@ -759,7 +759,7 @@ components:
         displayName: { type: string }
         role: { $ref: '#/components/schemas/Role' }
         enabled: { type: boolean }
-        password: { type: string, format: password, minLength: 12 }
+        password: { type: string, format: password, minLength: 12, maxLength: 72 }
 
     UserPage:
       type: object
@@ -950,6 +950,9 @@ components:
         userId: { type: integer, format: int64, nullable: true }
         action:
           type: string
+          description: |
+            Implemented so far: LOGIN_SUCCESS, LOGIN_FAILURE, LOGIN_BLOCKED, USER_CREATE,
+            USER_UPDATE, USER_CAMERAS_UPDATE, CAMERA_CREATE.
           example: EVENT_SEARCH
         resourceType: { type: string, nullable: true }
         resourceId: { type: integer, format: int64, nullable: true }

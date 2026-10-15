@@ -152,10 +152,22 @@ erDiagram
 - The last active admin cannot be disabled or deleted.
 - Audit rows are never updated or deleted by the application.
 
-## 5. Changes needed to the current scaffold
+The database enforces these with foreign-key rules:
 
-The scaffold's `Camera` entity has `sourceUrl`, which does not fit the uploaded-footage design. Planned changes:
+| Deleted row | Effect |
+|---|---|
+| Video | Its processing jobs and events are deleted (cascade). |
+| Camera | Blocked while it has videos or events (restrict). Its zones, rules and access grants are deleted (cascade). |
+| Zone | Rules scoped to it are deleted (cascade). Events keep their history; `zone_id` is set to null. |
+| Event rule | Events keep their history; `rule_id` is set to null. |
+| User | Blocked while the user has uploaded videos or has audit log entries (restrict). Such users are disabled instead. Access grants are deleted (cascade). |
 
-1. Remove `sourceUrl` from `Camera`.
-2. Replace `spring.jpa.hibernate.ddl-auto: update` with Flyway migrations, starting with a baseline migration that creates the tables above.
-3. Add entities and repositories for the remaining tables as each feature is built (users and access first, then videos, jobs, events, audit).
+Role, rule type, job status, event type and object label are also limited to their allowed values with check constraints.
+
+## 5. Implementation
+
+The schema is created by Flyway from `backend/src/main/resources/db/migration`. `V1__baseline_schema.sql` creates every table, constraint and index above. Hibernate runs with `ddl-auto: validate`, so the application will not start if an entity does not match the schema. Any schema change needs a new migration file; applied migrations are never edited.
+
+The same SQL runs on PostgreSQL and on the in-memory H2 database used by the `dev` profile, which runs in PostgreSQL compatibility mode. JSON columns are `jsonb` on PostgreSQL and `json` on H2, chosen through the Flyway placeholder `json_type`.
+
+The scaffold's `Camera.sourceUrl` field has been removed. Entities and repositories for the remaining tables are added as each feature is built (users and access first, then videos, jobs, events, audit).

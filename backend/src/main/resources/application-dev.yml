@@ -1,9 +1,18 @@
 # In-memory H2 so the backend runs without Postgres or Docker.
+# PostgreSQL mode lets the same Flyway migrations run here and in production.
 spring:
   datasource:
-    url: jdbc:h2:mem:cctv;DB_CLOSE_DELAY=-1
+    url: jdbc:h2:mem:cctv;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1
     username: sa
     password:
-  jpa:
-    hibernate:
-      ddl-auto: create-drop
+  flyway:
+    placeholders:
+      json_type: json
+
+# Development-only values. Never use these anywhere reachable from the internet.
+app:
+  auth:
+    jwt-secret: dev-only-secret-change-me-0123456789abcdef
+    bootstrap-admin:
+      email: admin@cctv.local
+      password: admin-dev-password

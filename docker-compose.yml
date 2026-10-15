@@ -16,6 +16,10 @@ services:
       DB_URL: jdbc:postgresql://db:5432/cctv
       DB_USER: cctv
       DB_PASSWORD: cctv
+      # Local-only defaults. Real deployments set these from a secrets manager.
+      JWT_SECRET: ${JWT_SECRET:-local-compose-only-secret-not-for-production}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@cctv.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin-dev-password}
     ports:
       - "8080:8080"
     depends_on:

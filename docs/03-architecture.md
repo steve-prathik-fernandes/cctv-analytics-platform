@@ -154,4 +154,7 @@ Local development uses `docker-compose.yml` for PostgreSQL, the API and the dete
 ## 8. Known gaps
 
 - The scaffold's detection service only has `/health` and a single-image `/detect` stub. The `/jobs` flow above is design, not code yet.
-- Storage, authentication and Flyway migrations are not implemented yet (Weeks 6 and 7 in the plan).
+- Storage is not implemented yet. The database schema (Flyway), authentication, roles, camera access and the audit log are in place.
+- The service-token check for `/internal/**` is not implemented; those routes are closed to all callers until it is.
+- Login rate limiting is kept in memory, so it is per instance and resets on restart. This is enough for the single-instance deployment; several instances would need a shared store.
+- The audit log records the TCP peer address. Behind the load balancer, `server.forward-headers-strategy` must be configured to trust only the balancer's `X-Forwarded-For`.

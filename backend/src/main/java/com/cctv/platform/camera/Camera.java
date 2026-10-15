@@ -2,6 +2,7 @@ package com.cctv.platform.camera;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 import java.time.Instant;
 
@@ -14,14 +15,14 @@ public class Camera {
     private Long id;
 
     @NotBlank
-    @Column(nullable = false)
+    @Size(max = 120)
+    @Column(nullable = false, length = 120)
     private String name;
 
     /** Free-text location label, e.g. "Loading dock" or "Main entrance". */
+    @Size(max = 200)
+    @Column(length = 200)
     private String location;
-
-    /** RTSP URL or path to a recorded clip used as the source for this camera. */
-    private String sourceUrl;
 
     @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
@@ -31,7 +32,5 @@ public class Camera {
     public void setName(String name) { this.name = name; }
     public String getLocation() { return location; }
     public void setLocation(String location) { this.location = location; }
-    public String getSourceUrl() { return sourceUrl; }
-    public void setSourceUrl(String sourceUrl) { this.sourceUrl = sourceUrl; }
     public Instant getCreatedAt() { return createdAt; }
 }
