@@ -121,6 +121,16 @@ An event carries: `eventType`, `objectLabel`, `trackId`, `confidence`, `videoOff
    - **AFTER_HOURS_VEHICLE**: a vehicle track appears when its absolute time falls inside the configured window.
 6. Cut a short clip around each event (a few seconds of padding either side) and save it with the thumbnail.
 
+Implementation details (`ml-service/app/events.py`):
+
+- **Zone membership** uses the bottom-center point of the bounding box, where a person stands or a vehicle meets the road. Zones are drawn on the ground, so testing the box center would count a person as inside a zone they are standing in front of.
+- **Short tracks** seen in fewer than 3 sampled frames are dropped as detector flicker.
+- **Object label** is the most frequent label over the track, because the detector can switch between similar classes such as car and truck from frame to frame.
+- **Loitering** requires one continuous stretch inside the zone; leaving and coming back starts a new stretch. Each qualifying stretch is one event.
+- **Zone entry** is reported once per track, for the first stretch inside the zone.
+- **After-hours windows** are local times. The rule's `params` take an optional IANA `timezone` (default `UTC`), for example `{"start":"22:00","end":"06:00","timezone":"America/Toronto"}`. A window whose start is after its end crosses midnight. If the rule has a zone, only time inside the zone counts.
+- **Representative box and confidence** for each event come from its highest-confidence frame, which is also the frame used for the thumbnail.
+
 ## 6. Security architecture
 
 | Boundary or asset | Control |
@@ -153,8 +163,10 @@ Local development uses `docker-compose.yml` for PostgreSQL, the API and the dete
 
 ## 8. Known gaps
 
-- The scaffold's detection service only has `/health` and a single-image `/detect` stub. The `/jobs` flow above is design, not code yet.
-- Storage is not implemented yet. The database schema (Flyway), authentication, roles, camera access and the audit log are in place.
-- The service-token check for `/internal/**` is not implemented; those routes are closed to all callers until it is.
+- The upload-to-event flow in section 3 runs end to end on a local machine: upload, storage, job dispatch, detection, callbacks and event search. Clip and thumbnail steps are the exception (next item).
+- Thumbnails and clips are not produced yet (step 6). The service reads videos from a local folder (`STORAGE_DIR`) standing in for S3.
+- Storage uses a local folder shared by the API and the detection service (`VideoStorage` with `LocalVideoStorage`). The S3 implementation and signed links are not built, so the clip and thumbnail endpoints are not implemented.
+- Video duration is not read from the file, so `durationSeconds` is always null.
+- If the detection service is down when a video is uploaded, the job is marked FAILED; there is no automatic retry. A job that is accepted but never reported back stays RUNNING.
 - Login rate limiting is kept in memory, so it is per instance and resets on restart. This is enough for the single-instance deployment; several instances would need a shared store.
 - The audit log records the TCP peer address. Behind the load balancer, `server.forward-headers-strategy` must be configured to trust only the balancer's `X-Forwarded-For`.

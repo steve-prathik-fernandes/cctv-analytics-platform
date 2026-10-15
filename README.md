@@ -32,6 +32,16 @@ Outside the dev profile the backend needs these environment variables:
 | `JWT_SECRET` | Signing key for login tokens, at least 32 characters. The API will not start without it. |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Creates the first admin when the database has no users. Ignored afterwards. |
 | `DB_URL`, `DB_USER`, `DB_PASSWORD` | PostgreSQL connection. |
+| `SERVICE_TOKEN` | Shared secret between the backend and the detection service, at least 32 characters. Set the same value on both. |
+| `DETECTION_URL` | Detection service address (default `http://localhost:8000`). |
+| `STORAGE_DIR` | Folder for uploaded footage (default `../data/storage`). The detection service must see the same folder. |
+
+**Processing footage locally** needs the detection service running with the same token and folder as the dev backend:
+
+```bash
+cd ml-service && source .venv/bin/activate
+SERVICE_TOKEN=dev-only-service-token-change-me-0123456789 uvicorn app.main:app --port 8000
+```
 
 **Frontend:**
 

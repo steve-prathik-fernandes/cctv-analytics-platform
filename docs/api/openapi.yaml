@@ -353,8 +353,12 @@ paths:
       tags: [Footage]
       summary: Upload footage for a camera and start processing (operator)
       description: |
-        Accepts MP4 files up to the configured size limit. The file is validated, stored,
-        and a processing job is queued. Returns immediately; poll the job for status.
+        Accepts MP4 files up to the configured size limit (500 MB by default). The file must
+        have a .mp4 name and MP4 content (an `ftyp` box), and is stored under a generated key;
+        the uploaded file name is kept for display only. `recordedStartAt` may not be in the
+        future. A processing job is queued and sent to the detection service. Returns
+        immediately; poll the job for status. If the detection service cannot be reached the
+        job is returned already FAILED.
       requestBody:
         required: true
         content:
@@ -845,7 +849,9 @@ components:
           description: |
             LOITERING: `{ "minSeconds": 30 }`.
             ZONE_ENTRY: `{}`.
-            AFTER_HOURS_VEHICLE: `{ "start": "22:00", "end": "06:00" }`.
+            AFTER_HOURS_VEHICLE: `{ "start": "22:00", "end": "06:00", "timezone": "America/Toronto" }`.
+            The window is in the given IANA time zone (default UTC); a start after the end
+            crosses midnight. zoneId is optional for this rule.
         enabled: { type: boolean, default: true }
 
     Video:
@@ -952,7 +958,9 @@ components:
           type: string
           description: |
             Implemented so far: LOGIN_SUCCESS, LOGIN_FAILURE, LOGIN_BLOCKED, USER_CREATE,
-            USER_UPDATE, USER_CAMERAS_UPDATE, CAMERA_CREATE.
+            USER_UPDATE, USER_CAMERAS_UPDATE, CAMERA_CREATE, ZONE_CREATE, ZONE_DELETE,
+            RULE_CREATE, RULE_UPDATE, RULE_DELETE, VIDEO_UPLOAD, VIDEO_DELETE, EVENT_SEARCH,
+            EVENT_VIEW.
           example: EVENT_SEARCH
         resourceType: { type: string, nullable: true }
         resourceId: { type: integer, format: int64, nullable: true }

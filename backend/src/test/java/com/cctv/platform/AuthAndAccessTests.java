@@ -133,9 +133,11 @@ class AuthAndAccessTests {
     }
 
     @Test
-    void internalEndpointsAreClosed() throws Exception {
-        mvc.perform(post("/internal/jobs/1/status").header("Authorization", bearer(admin)))
-                .andExpect(status().isForbidden());
+    void internalEndpointsRejectUserTokens() throws Exception {
+        // Even an admin's JWT is not a service token.
+        mvc.perform(post("/internal/jobs/1/status").header("Authorization", bearer(admin))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"RUNNING\"}"))
+                .andExpect(status().isUnauthorized());
     }
 
     // --- Roles ---

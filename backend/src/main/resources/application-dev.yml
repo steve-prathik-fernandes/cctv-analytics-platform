@@ -16,3 +16,5 @@ app:
     bootstrap-admin:
       email: admin@cctv.local
       password: admin-dev-password
+  detection:
+    service-token: ${SERVICE_TOKEN:dev-only-service-token-change-me-0123456789}

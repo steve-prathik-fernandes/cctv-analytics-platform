@@ -15,7 +15,7 @@ These are different needs, so the plan uses different sources for each.
 
 | Option | Contents | Annotations | Access and terms | Fit |
 |---|---|---|---|---|
-| **MOT17** (MOTChallenge) | 14 sequences, 33,705 frames, mixed static and moving cameras | Pedestrians only, with tracks | Direct download, 5.5 GB with images (9.7 MB metadata only). The download page states no license; confirm terms before relying on it. | Good for **person** precision and tracking checks |
+| **MOT17** (MOTChallenge) | 14 sequences, 33,705 frames, mixed static and moving cameras | Pedestrians only, with tracks | Direct download, 5.9 GB with images (9.7 MB metadata only). CC BY-NC-SA 3.0 (confirmed 2026-10-15 on motchallenge.net): non-commercial use with attribution. | Good for **person** precision and tracking checks |
 | **VIRAT** (ground camera) | About 8.5 hours of HD fixed-camera video, 11 outdoor scenes | Events and object tracks (people, vehicles) | Ground data requires signing the VIRAT Video Dataset Protection Agreement. Download size not stated on the main page. | Closest to real CCTV, but adds an approval step and delay |
 | **UA-DETRAC** | Traffic-camera vehicle videos | Vehicle boxes and tracks | The original host (detrac-db.rit.albany.edu) now redirects to a lab page. Copies exist on Kaggle, Hugging Face and Roboflow, but I have not verified their completeness or licensing. | Good for **vehicles** if a trustworthy copy is found |
 | **Self-recorded clips** | Your own footage | Hand-labeled in CVAT | You control the terms. Must use consenting people only (charter Section 3.4). | Best for the **live demo**; also a small vehicle evaluation set |
@@ -42,7 +42,8 @@ It is the closest match to the use case, but the access agreement puts an extern
 
 ## Action items
 
-- [ ] Download MOT17 and confirm which sequences use a static camera.
+- [x] Confirm the MOT17 license: CC BY-NC-SA 3.0. Cite Milan et al., "MOT16: A Benchmark for Multi-Object Tracking", arXiv:1603.00831, 2016, in the final report.
+- [x] Download MOT17 and confirm which sequences use a static camera: 02, 04 and 09 (measured, see [detection baseline](06-detection-baseline.md)).
 - [ ] Record 3 to 5 short demo clips (30 to 120 seconds) with consent.
 - [ ] Set up a CVAT project for the vehicle evaluation frames.
 - [ ] Decide in Week 4 whether to request VIRAT access.

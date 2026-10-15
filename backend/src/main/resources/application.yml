@@ -15,6 +15,12 @@ spring:
   mvc:
     problemdetails:
       enabled: true
+  servlet:
+    multipart:
+      # Hard limits enforced by the servlet container; app.upload.max-bytes gives the friendly error.
+      max-file-size: 512MB
+      max-request-size: 513MB
+      file-size-threshold: 1MB
 
 app:
   auth:
@@ -26,6 +32,19 @@ app:
     bootstrap-admin:
       email: ${ADMIN_EMAIL:}
       password: ${ADMIN_PASSWORD:}
+
+  storage:
+    # Local folder standing in for S3. The detection service reads the same folder (STORAGE_DIR).
+    local-dir: ${STORAGE_DIR:../data/storage}
+  upload:
+    max-bytes: 524288000   # 500 MB
+  detection:
+    base-url: ${DETECTION_URL:http://localhost:8000}
+    # Shared with the detection service. No default: the API will not start without one.
+    service-token: ${SERVICE_TOKEN}
+    model-name: yolov8n
+    frame-stride: 3
+    min-confidence: 0.4
 
 management:
   endpoints:

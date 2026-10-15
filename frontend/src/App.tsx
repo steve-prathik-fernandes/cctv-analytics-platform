@@ -1,23 +1,19 @@
 import { useCallback, useEffect, useState } from 'react'
 import './App.css'
 import { api, getToken, setToken, setUnauthorizedHandler, type User } from './api'
+import CameraDetail, { type Camera } from './CameraDetail'
 import Login from './Login'
-
-interface Camera {
-  id: number
-  name: string
-  location: string | null
-  createdAt: string
-}
 
 function App() {
   const [user, setUser] = useState<User | null>(null)
   // True until we know whether a saved token is still valid.
   const [checking, setChecking] = useState(() => getToken() !== null)
+  const [selected, setSelected] = useState<Camera | null>(null)
 
   const logout = useCallback(() => {
     setToken(null)
     setUser(null)
+    setSelected(null)
   }, [])
 
   useEffect(() => {
@@ -42,7 +38,11 @@ function App() {
             </span>
             <button type="button" onClick={logout}>Log out</button>
           </p>
-          <Cameras isAdmin={user.role === 'ADMIN'} />
+          {selected ? (
+            <CameraDetail camera={selected} onBack={() => setSelected(null)} />
+          ) : (
+            <Cameras isAdmin={user.role === 'ADMIN'} onOpen={setSelected} />
+          )}
         </>
       ) : (
         <Login onLogin={setUser} />
@@ -51,7 +51,7 @@ function App() {
   )
 }
 
-function Cameras({ isAdmin }: { isAdmin: boolean }) {
+function Cameras({ isAdmin, onOpen }: { isAdmin: boolean; onOpen: (camera: Camera) => void }) {
   const [cameras, setCameras] = useState<Camera[]>([])
   const [name, setName] = useState('')
   const [location, setLocation] = useState('')
@@ -106,7 +106,10 @@ function Cameras({ isAdmin }: { isAdmin: boolean }) {
         <ul>
           {cameras.map((c) => (
             <li key={c.id}>
-              {c.name}
+              <button type="button" onClick={() => onOpen(c)}
+                style={{ background: 'none', border: 'none', padding: 0, color: 'var(--accent)', cursor: 'pointer', font: 'inherit', textDecoration: 'underline' }}>
+                {c.name}
+              </button>
               {c.location ? ` (${c.location})` : ''}
             </li>
           ))}

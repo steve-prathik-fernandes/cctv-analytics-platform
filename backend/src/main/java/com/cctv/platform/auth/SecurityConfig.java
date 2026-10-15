@@ -1,10 +1,12 @@
 package com.cctv.platform.auth;
 
+import com.cctv.platform.job.DetectionProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -22,6 +24,7 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -38,10 +41,30 @@ import java.util.List;
  */
 @Configuration
 @EnableMethodSecurity
-@EnableConfigurationProperties(AuthProperties.class)
+@EnableConfigurationProperties({AuthProperties.class, DetectionProperties.class})
 public class SecurityConfig implements WebMvcConfigurer {
 
+    /** Detection service callbacks: service token only, user JWTs are not accepted here. */
     @Bean
+    @Order(1)
+    SecurityFilterChain internal(HttpSecurity http, ObjectMapper json, DetectionProperties detection)
+            throws Exception {
+        http
+                .securityMatcher("/internal/**")
+                .csrf(csrf -> csrf.disable())
+                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .addFilterBefore(new ServiceTokenFilter(detection.serviceToken()), AnonymousAuthenticationFilter.class)
+                .authorizeHttpRequests(auth -> auth.anyRequest().hasAuthority(ServiceTokenFilter.ROLE))
+                .exceptionHandling(e -> e
+                        .authenticationEntryPoint(ProblemSecurityHandlers.unauthorized(json))
+                        .accessDeniedHandler(ProblemSecurityHandlers.forbidden(json)))
+                .httpBasic(b -> b.disable())
+                .formLogin(f -> f.disable());
+        return http.build();
+    }
+
+    @Bean
+    @Order(2)
     SecurityFilterChain api(HttpSecurity http, ObjectMapper json) throws Exception {
         http
                 // Bearer tokens are not sent automatically by browsers, so CSRF does not apply.
@@ -52,7 +75,6 @@ public class SecurityConfig implements WebMvcConfigurer {
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/api/**").authenticated()
-                        // /internal/** will use the detection service token; closed until then.
                         .anyRequest().denyAll())
                 .oauth2ResourceServer(rs -> rs
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))

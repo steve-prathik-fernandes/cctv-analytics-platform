@@ -20,6 +20,11 @@ services:
       JWT_SECRET: ${JWT_SECRET:-local-compose-only-secret-not-for-production}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@cctv.local}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin-dev-password}
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-local-compose-only-service-token-0123456789}
+      DETECTION_URL: http://ml-service:8000
+      STORAGE_DIR: /data/storage
+    volumes:
+      - storage:/data/storage
     ports:
       - "8080:8080"
     depends_on:
@@ -27,8 +32,15 @@ services:
 
   ml-service:
     build: ./ml-service
-    ports:
-      - "8000:8000"
+    environment:
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-local-compose-only-service-token-0123456789}
+      API_BASE_URL: http://backend:8080
+      STORAGE_DIR: /data/storage
+    volumes:
+      # Shared with the backend, standing in for the S3 bucket.
+      - storage:/data/storage
+    # No published port: only the backend calls the detection service (NFR-S8).
 
 volumes:
   dbdata:
+  storage:

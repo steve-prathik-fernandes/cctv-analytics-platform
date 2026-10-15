@@ -9,8 +9,9 @@
 | [03 Architecture](03-architecture.md) | Component and sequence diagrams, service contract, security, AWS mapping | 2 |
 | [04 Database design](04-database-design.md) | ER diagram, table notes, indexes, deletion rules | 2 |
 | [05 Technology decisions](05-tech-stack-decisions.md) | Options, decisions and trade-offs | 2 |
+| [06 Detection baseline](06-detection-baseline.md) | Person precision and recall on MOT17, speed, pipeline run on footage | 4 |
 | [API contract](api/openapi.yaml) | OpenAPI 3 specification | 2 |
-| [Weekly reports](weekly-reports/) | Drafts of the weekly progress reports | 1 and 2 |
+| [Weekly reports](weekly-reports/) | Drafts of the weekly progress reports | 1, 2 and 4 |
 
 Rendered PNG copies of every diagram are in [diagrams/](diagrams/) for use in the final report and slides.
 
