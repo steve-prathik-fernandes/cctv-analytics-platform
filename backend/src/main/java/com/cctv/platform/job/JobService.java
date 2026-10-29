@@ -9,6 +9,7 @@ import com.cctv.platform.event.EventRepository;
 import com.cctv.platform.job.DetectionClient.JobPayload;
 import com.cctv.platform.job.DetectionClient.RulePayload;
 import com.cctv.platform.job.DetectionClient.ZonePayload;
+import com.cctv.platform.storage.StorageKeys;
 import com.cctv.platform.video.Video;
 import com.cctv.platform.video.VideoRepository;
 import com.cctv.platform.zone.EventRule;
@@ -25,7 +26,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.time.Clock;
 import java.util.List;
 import java.util.Set;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /** Job lifecycle: dispatch to the detection service, then status and results from its callbacks. */
@@ -36,7 +36,6 @@ public class JobService {
     private static final Set<String> LABELS = Set.of("person", "car", "motorcycle", "bus", "truck");
     /** Upper bound per callback, so one bad request cannot exhaust memory or the database. */
     static final int MAX_EVENTS_PER_JOB = 10_000;
-    private static final Pattern SAFE_KEY = Pattern.compile("[A-Za-z0-9_\\-][A-Za-z0-9_./\\-]*");
 
     private final ProcessingJobRepository jobs;
     private final VideoRepository videos;
@@ -192,7 +191,7 @@ public class JobService {
 
     /** Keys become storage paths and signed links later, so only allow plain relative paths. */
     static boolean isSafeKey(String key) {
-        return key == null || (key.length() <= 512 && SAFE_KEY.matcher(key).matches() && !key.contains(".."));
+        return key == null || StorageKeys.isSafe(key);
     }
 
     private static ApiException bad(String detail) {

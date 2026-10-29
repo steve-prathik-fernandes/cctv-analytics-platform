@@ -34,7 +34,8 @@ Outside the dev profile the backend needs these environment variables:
 | `DB_URL`, `DB_USER`, `DB_PASSWORD` | PostgreSQL connection. |
 | `SERVICE_TOKEN` | Shared secret between the backend and the detection service, at least 32 characters. Set the same value on both. |
 | `DETECTION_URL` | Detection service address (default `http://localhost:8000`). |
-| `STORAGE_DIR` | Folder for uploaded footage (default `../data/storage`). The detection service must see the same folder. |
+| `STORAGE_DIR` | Folder for uploaded footage, clips and thumbnails (default `../data/storage`). The detection service must see the same folder. |
+| `STORAGE_SIGNING_SECRET` | Signs the short-lived links used to play clips and show thumbnails, at least 32 characters. |
 
 **Processing footage locally** needs the detection service running with the same token and folder as the dev backend:
 

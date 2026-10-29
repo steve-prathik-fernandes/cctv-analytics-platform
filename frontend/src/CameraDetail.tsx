@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from './api'
+import CameraAdmin from './CameraAdmin'
+import EventPanel, { type EventItem } from './EventPanel'
+import { label } from './format'
 
 export interface Camera {
   id: number
@@ -23,17 +26,6 @@ interface UploadResult {
   job: Job
 }
 
-interface EventItem {
-  id: number
-  eventType: string
-  objectLabel: string
-  trackId: number | null
-  confidence: number | null
-  startedAt: string
-  endedAt: string | null
-  zoneId: number | null
-}
-
 interface EventPage {
   content: EventItem[]
   totalElements: number
@@ -44,8 +36,14 @@ interface EventPage {
 const EVENT_TYPES = ['OBJECT_DETECTED', 'LOITERING', 'ZONE_ENTRY', 'AFTER_HOURS_VEHICLE']
 const POLL_MS = 2000
 
-function CameraDetail({ camera, onBack }: { camera: Camera; onBack: () => void }) {
+function CameraDetail({ camera, isAdmin, onBack, onChanged }: {
+  camera: Camera
+  isAdmin: boolean
+  onBack: () => void
+  onChanged: (camera: Camera | null) => void
+}) {
   const [events, setEvents] = useState<EventPage | null>(null)
+  const [open, setOpen] = useState<EventItem | null>(null)
   const [eventType, setEventType] = useState('')
   const [page, setPage] = useState(0)
   const [error, setError] = useState<string | null>(null)
@@ -81,13 +79,14 @@ function CameraDetail({ camera, onBack }: { camera: Camera; onBack: () => void }
       </select>
 
       {error && <p role="alert">{error}</p>}
+      {open && <EventPanel event={open} onClose={() => setOpen(null)} />}
       {events && events.totalElements === 0 && <p>No events yet. Upload footage to create some.</p>}
       {events && events.totalElements > 0 && (
         <>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ borderCollapse: 'collapse', width: '100%', marginTop: 8 }}>
               <thead>
-                <tr>{['Time', 'Event', 'Object', 'Track', 'Duration', 'Confidence'].map((h) => (
+                <tr>{['Time', 'Event', 'Object', 'Track', 'Duration', 'Confidence', ''].map((h) => (
                   <th key={h} style={cell}>{h}</th>
                 ))}</tr>
               </thead>
@@ -100,6 +99,11 @@ function CameraDetail({ camera, onBack }: { camera: Camera; onBack: () => void }
                     <td style={cell}>{e.trackId ?? '–'}</td>
                     <td style={cell}>{duration(e.startedAt, e.endedAt)}</td>
                     <td style={cell}>{e.confidence == null ? '–' : `${Math.round(e.confidence * 100)}%`}</td>
+                    <td style={cell}>
+                      {(e.clipUrl || e.thumbnailUrl) && (
+                        <button type="button" onClick={() => setOpen(e)} aria-label={`Play clip of event ${e.id}`}>Play</button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -112,6 +116,8 @@ function CameraDetail({ camera, onBack }: { camera: Camera; onBack: () => void }
           </p>
         </>
       )}
+
+      {isAdmin && <CameraAdmin camera={camera} onChanged={onChanged} onDeleted={() => onChanged(null)} />}
     </section>
   )
 }
@@ -191,9 +197,6 @@ function jobMessage(job: Job): string {
   }
 }
 
-function label(type: string): string {
-  return type.charAt(0) + type.slice(1).toLowerCase().replaceAll('_', ' ')
-}
 
 function duration(start: string, end: string | null): string {
   if (!end) return '–'

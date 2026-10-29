@@ -11,7 +11,7 @@ from pathlib import Path
 
 import httpx
 
-from . import detector
+from . import detector, media
 from .events import build_events
 from .models import JobRequest
 
@@ -62,6 +62,7 @@ def run(job: JobRequest) -> None:
             raise FileNotFoundError("video not found in storage")
         result = detector.track_video(path, job.frameStride, job.minConfidence)
         events = build_events(result.observations, job)
+        events = _with_media(job, path, events, result.observations)
         client.events(job.jobId, [e.model_dump(mode="json") for e in events])
         log.info("Job %d done: %d events", job.jobId, len(events))
     except Exception as exc:  # report every failure back, never leave a job RUNNING
@@ -70,6 +71,19 @@ def run(job: JobRequest) -> None:
             client.status(job.jobId, "FAILED", _reason(exc))
         except Exception:
             log.exception("Could not report failure of job %d", job.jobId)
+
+
+def _with_media(job: JobRequest, path: Path, events, observations):
+    """Adds thumbnails and clips. A media failure is logged, never fails the job: the events
+    are still worth having without their clips."""
+    if os.environ.get("MEDIA", "on").lower() == "off":
+        return events
+    try:
+        return media.render(path, events, observations, settings.storage_dir, (job.cameraId, job.jobId),
+                            media.MediaSettings.from_env())
+    except Exception:
+        log.exception("Media for job %d failed; sending events without clips", job.jobId)
+        return events
 
 
 def _reason(exc: Exception) -> str:

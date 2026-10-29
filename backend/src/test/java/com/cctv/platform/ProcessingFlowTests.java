@@ -80,6 +80,7 @@ class ProcessingFlowTests {
     @Autowired AuditLogRepository auditLogs;
     @Autowired PasswordEncoder passwordEncoder;
     @MockBean DetectionClient detection;
+    @Autowired com.cctv.platform.storage.LinkSigner signer;
 
     User admin;
     User operator;
@@ -370,7 +371,133 @@ class ProcessingFlowTests {
                 .andExpect(jsonPath("$.length()").value(0));
     }
 
+    // --- Clips, thumbnails and signed links ---
+
+    @Test
+    void clipRedirectsToSignedLinkThatServesTheFile() throws Exception {
+        long eventId = eventWithMedia();
+        String location = mvc.perform(get("/api/events/" + eventId + "/clip").header("Authorization", bearer(operator)))
+                .andExpect(status().isFound())
+                .andReturn().getResponse().getHeader("Location");
+        assertThat(location).startsWith("/api/media?key=clips/");
+        assertThat(lastAuditAction()).isEqualTo("CLIP_VIEW");
+
+        // No login token: the signature alone authorizes the link.
+        mvc.perform(get(java.net.URI.create(location)))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().contentType("video/mp4"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().bytes(CLIP_BYTES));
+        // Seeking: browsers ask for byte ranges.
+        mvc.perform(get(java.net.URI.create(location)).header("Range", "bytes=0-3"))
+                .andExpect(status().isPartialContent());
+    }
+
+    @Test
+    void thumbnailRedirectsToSignedLink() throws Exception {
+        long eventId = eventWithMedia();
+        String location = mvc.perform(get("/api/events/" + eventId + "/thumbnail").header("Authorization", bearer(operator)))
+                .andExpect(status().isFound()).andReturn().getResponse().getHeader("Location");
+        mvc.perform(get(java.net.URI.create(location)))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().contentType("image/jpeg"));
+    }
+
+    @Test
+    void tamperedOrExpiredLinksAreRefused() throws Exception {
+        long eventId = eventWithMedia();
+        String location = mvc.perform(get("/api/events/" + eventId + "/clip").header("Authorization", bearer(operator)))
+                .andReturn().getResponse().getHeader("Location");
+        // Same signature, different file.
+        mvc.perform(get(java.net.URI.create(location.replace("clips/", "videos/")))).andExpect(status().isForbidden());
+        // Signature changed.
+        mvc.perform(get(java.net.URI.create(location.substring(0, location.length() - 3) + "AAA"))).andExpect(status().isForbidden());
+        // Correctly signed but already expired.
+        long past = Instant.now().minusSeconds(60).getEpochSecond();
+        String key = "clips/" + camera.getId() + "/1/0000.mp4";
+        mvc.perform(get("/api/media").param("key", key).param("expires", String.valueOf(past))
+                        .param("sig", signer.sign(key, past)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void mediaOfOtherCamerasIsNotFound() throws Exception {
+        long eventId = eventWithMedia();
+        User outsider = createUser(Role.OPERATOR);
+        mvc.perform(get("/api/events/" + eventId + "/clip").header("Authorization", bearer(outsider)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void eventWithoutMediaHasNoClip() throws Exception {
+        long jobId = uploadJob();
+        internal(jobId, "events", events(event("OBJECT_DETECTED", "person", 0.9, 0, 1000))).andExpect(status().isNoContent());
+        long eventId = events.findByJobIdOrderByStartedAt(jobId).get(0).getId();
+        mvc.perform(get("/api/events/" + eventId + "/clip").header("Authorization", bearer(operator)))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/events/" + eventId).header("Authorization", bearer(operator)))
+                .andExpect(jsonPath("$.clipUrl").doesNotExist());
+    }
+
+    // --- Camera edit and delete ---
+
+    @Test
+    void adminUpdatesCameraOperatorCannot() throws Exception {
+        mvc.perform(put("/api/cameras/" + camera.getId()).header("Authorization", bearer(admin))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Dock 2\",\"location\":\"East\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.name").value("Dock 2"));
+        assertThat(lastAuditAction()).isEqualTo("CAMERA_UPDATE");
+        mvc.perform(put("/api/cameras/" + camera.getId()).header("Authorization", bearer(operator))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"X\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void cameraWithFootageNeedsConfirmationToDelete() throws Exception {
+        long jobId = uploadJob();
+        var video = videos.findById(jobs.findById(jobId).orElseThrow().getVideoId()).orElseThrow();
+        Path file = storageDir.resolve(video.getStorageKey());
+
+        mvc.perform(delete("/api/cameras/" + camera.getId()).header("Authorization", bearer(admin)))
+                .andExpect(status().isConflict());
+        assertThat(file).exists();
+
+        mvc.perform(delete("/api/cameras/" + camera.getId()).param("deleteFootage", "true")
+                        .header("Authorization", bearer(admin)))
+                .andExpect(status().isNoContent());
+        assertThat(cameras.findById(camera.getId())).isEmpty();
+        assertThat(videos.findById(video.getId())).isEmpty();
+        assertThat(file).doesNotExist();
+        assertThat(lastAuditAction()).isEqualTo("CAMERA_DELETE");
+    }
+
+    @Test
+    void cameraWithoutFootageDeletesAndOperatorCannotDelete() throws Exception {
+        mvc.perform(delete("/api/cameras/" + otherCamera.getId()).header("Authorization", bearer(operator)))
+                .andExpect(status().isForbidden());
+        mvc.perform(delete("/api/cameras/" + otherCamera.getId()).header("Authorization", bearer(admin)))
+                .andExpect(status().isNoContent());
+        assertThat(cameras.findById(otherCamera.getId())).isEmpty();
+    }
+
     // --- Helpers ---
+    static final byte[] CLIP_BYTES = {0, 0, 0, 0x18, 'f', 't', 'y', 'p', 'm', 'p', '4', '2', 1, 2, 3, 4};
+
+    /** An event whose clip and thumbnail files exist in storage, as the detection service leaves them. */
+    private long eventWithMedia() throws Exception {
+        long jobId = uploadJob();
+        String clip = "clips/" + camera.getId() + "/" + jobId + "/0000.mp4";
+        String thumb = "thumbnails/" + camera.getId() + "/" + jobId + "/0000.jpg";
+        Files.createDirectories(storageDir.resolve(clip).getParent());
+        Files.write(storageDir.resolve(clip), CLIP_BYTES);
+        Files.createDirectories(storageDir.resolve(thumb).getParent());
+        Files.write(storageDir.resolve(thumb), new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF});
+        var e = new java.util.HashMap<>(event("OBJECT_DETECTED", "person", 0.9, 0, 1000));
+        e.put("clipKey", clip);
+        e.put("thumbnailKey", thumb);
+        internal(jobId, "events", events(e)).andExpect(status().isNoContent());
+        return events.findByJobIdOrderByStartedAt(jobId).get(0).getId();
+    }
+
 
     private User createUser(Role role) {
         return users.saveAndFlush(new User(role.name().toLowerCase() + "-" + UUID.randomUUID() + "@test.local",

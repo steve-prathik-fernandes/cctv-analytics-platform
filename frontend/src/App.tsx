@@ -1,19 +1,25 @@
 import { useCallback, useEffect, useState } from 'react'
 import './App.css'
 import { api, getToken, setToken, setUnauthorizedHandler, type User } from './api'
+import AuditLogPage from './AuditPage'
 import CameraDetail, { type Camera } from './CameraDetail'
 import Login from './Login'
+import UsersPage from './UsersPage'
+
+type Page = 'cameras' | 'users' | 'audit'
 
 function App() {
   const [user, setUser] = useState<User | null>(null)
   // True until we know whether a saved token is still valid.
   const [checking, setChecking] = useState(() => getToken() !== null)
   const [selected, setSelected] = useState<Camera | null>(null)
+  const [page, setPage] = useState<Page>('cameras')
 
   const logout = useCallback(() => {
     setToken(null)
     setUser(null)
     setSelected(null)
+    setPage('cameras')
   }, [])
 
   useEffect(() => {
@@ -38,8 +44,24 @@ function App() {
             </span>
             <button type="button" onClick={logout}>Log out</button>
           </p>
-          {selected ? (
-            <CameraDetail camera={selected} onBack={() => setSelected(null)} />
+          {user.role === 'ADMIN' && (
+            <nav aria-label="Main" style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+              {(['cameras', 'users', 'audit'] as Page[]).map((p) => (
+                <button key={p} type="button" aria-current={page === p ? 'page' : undefined}
+                  onClick={() => { setPage(p); setSelected(null) }}
+                  style={{ fontWeight: page === p ? 700 : 400 }}>
+                  {p === 'cameras' ? 'Cameras' : p === 'users' ? 'Users' : 'Audit log'}
+                </button>
+              ))}
+            </nav>
+          )}
+          {page === 'users' && user.role === 'ADMIN' ? (
+            <UsersPage currentUserId={user.id} />
+          ) : page === 'audit' && user.role === 'ADMIN' ? (
+            <AuditLogPage />
+          ) : selected ? (
+            <CameraDetail camera={selected} isAdmin={user.role === 'ADMIN'} onBack={() => setSelected(null)}
+              onChanged={(c) => setSelected(c)} />
           ) : (
             <Cameras isAdmin={user.role === 'ADMIN'} onOpen={setSelected} />
           )}

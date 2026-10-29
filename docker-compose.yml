@@ -21,6 +21,7 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@cctv.local}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin-dev-password}
       SERVICE_TOKEN: ${SERVICE_TOKEN:-local-compose-only-service-token-0123456789}
+      STORAGE_SIGNING_SECRET: ${STORAGE_SIGNING_SECRET:-local-compose-only-signing-secret-0123456789}
       DETECTION_URL: http://ml-service:8000
       STORAGE_DIR: /data/storage
     volumes:

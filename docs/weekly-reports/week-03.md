@@ -1,4 +1,4 @@
-# Weekly Report: Week 4
+# Weekly Report: Week 3
 
 Project: Smart CCTV Analytics Platform (solo)
 Student: [your name]

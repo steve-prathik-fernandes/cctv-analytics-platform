@@ -41,6 +41,23 @@ public class CameraService {
     }
 
     @Transactional
+    public Camera update(long cameraId, String name, String location, CurrentUser actor) {
+        Camera camera = cameras.findById(cameraId).orElseThrow(() -> ApiException.notFound("Camera not found."));
+        camera.setName(name.trim());
+        camera.setLocation(location == null || location.isBlank() ? null : location.trim());
+        audit.record(actor.id(), AuditAction.CAMERA_UPDATE, "camera", cameraId, Map.of("name", camera.getName()));
+        return camera;
+    }
+
+    /** Deletes a camera that has no footage left; zones, rules and access grants go with it. */
+    @Transactional
+    public void delete(long cameraId, CurrentUser actor) {
+        Camera camera = cameras.findById(cameraId).orElseThrow(() -> ApiException.notFound("Camera not found."));
+        audit.record(actor.id(), AuditAction.CAMERA_DELETE, "camera", cameraId, Map.of("name", camera.getName()));
+        cameras.delete(camera);
+    }
+
+    @Transactional
     public Camera create(String name, String location, CurrentUser actor) {
         Camera camera = new Camera();
         camera.setName(name.trim());

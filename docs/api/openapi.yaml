@@ -118,6 +118,23 @@ paths:
   /api/users/{userId}/cameras:
     parameters:
       - $ref: '#/components/parameters/UserId'
+    get:
+      tags: [Users]
+      summary: List the cameras an operator can access (admin)
+      responses:
+        '200':
+          description: Camera ids
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cameraIds:
+                    type: array
+                    items: { type: integer, format: int64 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
     put:
       tags: [Users]
       summary: Replace the cameras an operator can access (admin)
@@ -523,6 +540,7 @@ paths:
     get:
       tags: [Events]
       summary: Get the event thumbnail (operator)
+      description: 404 when the event has no thumbnail, for example when media rendering failed.
       responses:
         '302':
           description: Redirect to the signed thumbnail link
@@ -532,6 +550,30 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/media:
+    get:
+      tags: [Events]
+      summary: Signed media link (local storage)
+      description: |
+        Target of the clip and thumbnail redirects while storage is the local folder. The
+        signature is the authorization, so no bearer token is needed and browsers can load it
+        in <img> and <video>. Links expire after app.storage.link-ttl (5 minutes). Supports
+        HTTP range requests for seeking. Every failure (bad signature, expired, missing file)
+        returns 403 so the endpoint reveals nothing about which files exist. On AWS, S3
+        presigned URLs replace this endpoint.
+      security: []
+      parameters:
+        - { name: key, in: query, required: true, schema: { type: string } }
+        - { name: expires, in: query, required: true, schema: { type: integer, format: int64 }, description: Unix time in seconds }
+        - { name: sig, in: query, required: true, schema: { type: string }, description: HMAC-SHA256 of key and expires, base64url }
+      responses:
+        '200':
+          description: The file (image/jpeg, video/mp4 or video/webm)
+        '206':
+          description: Part of the file, for a range request
+        '403':
+          description: Invalid or expired link
 
   /api/audit-logs:
     get:
@@ -960,7 +1002,7 @@ components:
             Implemented so far: LOGIN_SUCCESS, LOGIN_FAILURE, LOGIN_BLOCKED, USER_CREATE,
             USER_UPDATE, USER_CAMERAS_UPDATE, CAMERA_CREATE, ZONE_CREATE, ZONE_DELETE,
             RULE_CREATE, RULE_UPDATE, RULE_DELETE, VIDEO_UPLOAD, VIDEO_DELETE, EVENT_SEARCH,
-            EVENT_VIEW.
+            EVENT_VIEW, CLIP_VIEW, CAMERA_UPDATE, CAMERA_DELETE.
           example: EVENT_SEARCH
         resourceType: { type: string, nullable: true }
         resourceId: { type: integer, format: int64, nullable: true }

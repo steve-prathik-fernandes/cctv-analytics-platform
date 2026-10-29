@@ -7,15 +7,19 @@ import com.cctv.platform.camera.Camera;
 import com.cctv.platform.camera.CameraService;
 import com.cctv.platform.common.ApiException;
 import com.cctv.platform.common.PageResponse;
+import com.cctv.platform.storage.VideoStorage;
 import jakarta.persistence.criteria.Predicate;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -37,11 +41,16 @@ public class EventController {
     private final EventRepository events;
     private final CameraService cameras;
     private final AuditService audit;
+    private final VideoStorage storage;
+    private final Duration linkTtl;
 
-    public EventController(EventRepository events, CameraService cameras, AuditService audit) {
+    public EventController(EventRepository events, CameraService cameras, AuditService audit, VideoStorage storage,
+                           @Value("${app.storage.link-ttl}") Duration linkTtl) {
         this.events = events;
         this.cameras = cameras;
         this.audit = audit;
+        this.storage = storage;
+        this.linkTtl = linkTtl;
     }
 
     public record EventResponse(Long id, Long cameraId, Long videoId, Long jobId, Event.Type eventType,
@@ -115,13 +124,39 @@ public class EventController {
     @GetMapping("/{eventId}")
     @Transactional
     public EventResponse get(@PathVariable long eventId, CurrentUser user) {
+        Event event = visible(eventId, user);
+        audit.record(user.id(), AuditAction.EVENT_VIEW, "event", eventId, null);
+        return EventResponse.of(event);
+    }
+
+    /** Redirects to a short-lived signed link to the event's clip. The view is audited. */
+    @GetMapping("/{eventId}/clip")
+    @Transactional
+    public ResponseEntity<Void> clip(@PathVariable long eventId, CurrentUser user) {
+        Event event = visible(eventId, user);
+        if (event.getClipKey() == null) throw ApiException.notFound("This event has no clip.");
+        audit.record(user.id(), AuditAction.CLIP_VIEW, "event", eventId, null);
+        return ResponseEntity.status(HttpStatus.FOUND).location(storage.signedUrl(event.getClipKey(), linkTtl)).build();
+    }
+
+    /** Redirects to a short-lived signed link to the event's thumbnail. */
+    @GetMapping("/{eventId}/thumbnail")
+    @Transactional(readOnly = true)
+    public ResponseEntity<Void> thumbnail(@PathVariable long eventId, CurrentUser user) {
+        Event event = visible(eventId, user);
+        if (event.getThumbnailKey() == null) throw ApiException.notFound("This event has no thumbnail.");
+        return ResponseEntity.status(HttpStatus.FOUND)
+                .location(storage.signedUrl(event.getThumbnailKey(), linkTtl)).build();
+    }
+
+    /** The event if the caller may see its camera; otherwise not found, as for other cameras. */
+    private Event visible(long eventId, CurrentUser user) {
         Event event = events.findById(eventId).orElseThrow(() -> ApiException.notFound("Event not found."));
         try {
             cameras.getVisible(event.getCameraId(), user);
         } catch (ApiException e) {
             throw ApiException.notFound("Event not found.");
         }
-        audit.record(user.id(), AuditAction.EVENT_VIEW, "event", eventId, null);
-        return EventResponse.of(event);
+        return event;
     }
 }

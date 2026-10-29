@@ -96,6 +96,11 @@ public class UserService {
         return user;
     }
 
+    @Transactional(readOnly = true)
+    public List<Long> cameraIds(long id) {
+        return get(id).getCameras().stream().map(Camera::getId).sorted().toList();
+    }
+
     @Transactional
     public List<Long> replaceCameras(long id, List<Long> cameraIds, long actorId) {
         User user = get(id);

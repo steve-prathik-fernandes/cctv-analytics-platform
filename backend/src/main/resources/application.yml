@@ -36,6 +36,9 @@ app:
   storage:
     # Local folder standing in for S3. The detection service reads the same folder (STORAGE_DIR).
     local-dir: ${STORAGE_DIR:../data/storage}
+    # Signs short-lived media links. No default: the API will not start without one.
+    signing-secret: ${STORAGE_SIGNING_SECRET}
+    link-ttl: 5m
   upload:
     max-bytes: 524288000   # 500 MB
   detection:

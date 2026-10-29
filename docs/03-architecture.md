@@ -130,6 +130,7 @@ Implementation details (`ml-service/app/events.py`):
 - **Zone entry** is reported once per track, for the first stretch inside the zone.
 - **After-hours windows** are local times. The rule's `params` take an optional IANA `timezone` (default `UTC`), for example `{"start":"22:00","end":"06:00","timezone":"America/Toronto"}`. A window whose start is after its end crosses midnight. If the rule has a zone, only time inside the zone counts.
 - **Representative box and confidence** for each event come from its highest-confidence frame, which is also the frame used for the thumbnail.
+- **Thumbnails and clips** (`ml-service/app/media.py`) are written in one extra pass over the video after tracking: a JPEG of the highest-confidence frame and a clip from 2 seconds before the event to 2 seconds after it, at most 30 seconds, 640 px wide at about 15 frames per second, with the tracked box drawn. Clips are H.264 MP4 where the platform's OpenCV can encode it and VP8 WebM otherwise; browsers play both. Keys are `thumbnails/{camera}/{job}/{n}.jpg` and `clips/{camera}/{job}/{n}.mp4`. If media fails, the events are still sent without it.
 
 ## 6. Security architecture
 
@@ -163,9 +164,10 @@ Local development uses `docker-compose.yml` for PostgreSQL, the API and the dete
 
 ## 8. Known gaps
 
-- The upload-to-event flow in section 3 runs end to end on a local machine: upload, storage, job dispatch, detection, callbacks and event search. Clip and thumbnail steps are the exception (next item).
-- Thumbnails and clips are not produced yet (step 6). The service reads videos from a local folder (`STORAGE_DIR`) standing in for S3.
-- Storage uses a local folder shared by the API and the detection service (`VideoStorage` with `LocalVideoStorage`). The S3 implementation and signed links are not built, so the clip and thumbnail endpoints are not implemented.
+- The upload-to-event flow in section 3 runs end to end on a local machine, including thumbnails, clips and signed links.
+- Storage is a local folder shared by the API and the detection service (`VideoStorage` with `LocalVideoStorage`), standing in for S3. Signed links are HMAC-signed URLs to the API's `/api/media` endpoint, valid for 5 minutes; S3 presigned URLs replace them on AWS. The S3 implementation and encryption at rest are not built.
+- Clips cost about 0.5 MB per 6 seconds at 640×360 and 15 fps. Clips of overlapping events are stored separately, so a crowded scene stores more clip data than the original video. Width and maximum length are settings (`CLIP_WIDTH`, `CLIP_MAX_SECONDS`).
+- A clip whose signed link expires while it is playing stops loading further parts; reopening the event fetches a new link.
 - Video duration is not read from the file, so `durationSeconds` is always null.
 - If the detection service is down when a video is uploaded, the job is marked FAILED; there is no automatic retry. A job that is accepted but never reported back stays RUNNING.
 - Login rate limiting is kept in memory, so it is per instance and resets on restart. This is enough for the single-instance deployment; several instances would need a shared store.

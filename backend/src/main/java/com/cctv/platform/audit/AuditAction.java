@@ -9,6 +9,8 @@ public enum AuditAction {
     USER_UPDATE,
     USER_CAMERAS_UPDATE,
     CAMERA_CREATE,
+    CAMERA_UPDATE,
+    CAMERA_DELETE,
     ZONE_CREATE,
     ZONE_DELETE,
     RULE_CREATE,
@@ -17,5 +19,6 @@ public enum AuditAction {
     VIDEO_UPLOAD,
     VIDEO_DELETE,
     EVENT_SEARCH,
-    EVENT_VIEW
+    EVENT_VIEW,
+    CLIP_VIEW
 }

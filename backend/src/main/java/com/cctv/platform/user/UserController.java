@@ -44,6 +44,11 @@ public class UserController {
         return UserResponse.of(users.update(userId, req, actor.id()));
     }
 
+    @GetMapping("/{userId}/cameras")
+    public Map<String, Object> cameras(@PathVariable long userId) {
+        return Map.of("cameraIds", users.cameraIds(userId));
+    }
+
     @PutMapping("/{userId}/cameras")
     public Map<String, Object> replaceCameras(@PathVariable long userId, @Valid @RequestBody CameraAccess req,
                                               CurrentUser actor) {

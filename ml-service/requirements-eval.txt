@@ -1,0 +1,4 @@
+-r requirements-ml.txt
+# Tracking evaluation only (app/track_eval.py); not needed by the running service.
+# 1.4.0's own IoU helper breaks on NumPy 2, so track_eval computes the distance matrix itself.
+motmetrics==1.4.0

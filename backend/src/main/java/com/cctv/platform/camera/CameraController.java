@@ -1,6 +1,7 @@
 package com.cctv.platform.camera;
 
 import com.cctv.platform.auth.CurrentUser;
+import com.cctv.platform.video.CameraDeletionService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -15,9 +16,11 @@ import java.util.List;
 public class CameraController {
 
     private final CameraService cameras;
+    private final CameraDeletionService deletion;
 
-    public CameraController(CameraService cameras) {
+    public CameraController(CameraService cameras, CameraDeletionService deletion) {
         this.cameras = cameras;
+        this.deletion = deletion;
     }
 
     record CameraInput(@NotBlank @Size(max = 120) String name, @Size(max = 200) String location) {
@@ -38,5 +41,19 @@ public class CameraController {
     @PreAuthorize("hasRole('ADMIN')")
     public Camera create(@Valid @RequestBody CameraInput input, CurrentUser user) {
         return cameras.create(input.name(), input.location(), user);
+    }
+
+    @PutMapping("/{cameraId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Camera update(@PathVariable long cameraId, @Valid @RequestBody CameraInput input, CurrentUser user) {
+        return cameras.update(cameraId, input.name(), input.location(), user);
+    }
+
+    @DeleteMapping("/{cameraId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasRole('ADMIN')")
+    public void delete(@PathVariable long cameraId, @RequestParam(defaultValue = "false") boolean deleteFootage,
+                       CurrentUser user) {
+        deletion.delete(cameraId, deleteFootage, user);
     }
 }

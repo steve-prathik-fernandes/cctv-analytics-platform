@@ -104,6 +104,9 @@ class EventSubmission(BaseModel):
     ruleId: int | None = None
     thumbnailKey: str | None = None
     clipKey: str | None = None
+    # Offset of the highest-confidence frame, used to pick the thumbnail. Internal only:
+    # not part of the API contract, so it is left out of what is sent.
+    bestOffsetMs: int | None = Field(default=None, exclude=True)
 
 
 def parse_window(rule: Rule) -> tuple[time, time, str]:

@@ -83,14 +83,31 @@ There are more tracks than people because a track can break when someone is hidd
 
 The same run through the service's `POST /jobs` endpoint, with a stand-in for the API, produced the same 55 events and the expected status callbacks. A job for a missing file was reported as failed.
 
-## 4. Limitations
+## 4. Tracking quality
+
+Measured 2026-10-29 with `python -m app.track_eval` (scores from the standard `motmetrics` library), using the same ground-truth rules as section 2.
+
+| Sequence | Frames scored | People | MOTA | IDF1 | ID switches | Mostly tracked | Mostly lost |
+|---|---|---|---|---|---|---|---|
+| MOT17-02 | 200 | 52 | 32.9% | 43.7% | 23 | 10 | 32 |
+| MOT17-04 | 350 | 79 | 35.0% | 49.5% | 30 | 9 | 38 |
+| MOT17-09 | 175 | 26 | 73.8% | 67.2% | 52 | 15 | 3 |
+| **All** | **725** | **157** | **37.4%** | **50.1%** | **105** | **34** | **73** |
+
+Every 3rd frame, as the service runs, 640 px input, confidence 0.4. MOTA combines misses, false positives and identity switches; IDF1 measures how long each person keeps the same track id.
+
+The overall scores are held down by recall: precision is 92.8% and recall 41.1%, the same small-person limit as in section 3. On MOT17-09, where people are larger, MOTA is 73.8%. Tracking every frame instead gives IDF1 47.3% and 121 identity switches over 2175 frames, so the 3-frame sampling does not cost tracking quality.
+
+Each identity switch splits one person into two tracks, which means two "object detected" events, and a loitering timer that restarts. That is why the pipeline uses the longest continuous stay in a zone, and why tracks shorter than 3 sampled frames are dropped.
+
+## 5. Limitations
 
 - Vehicles are not measured. MOT17 annotates only pedestrians. The vehicle set (hand-labeled frames) is still to be built.
 - MOT17 is street footage at roughly head height. Real CCTV is often higher and wider-angle, which makes people smaller, so recall on real footage may be lower still.
 - Times are from a laptop CPU. The cloud instance will be slower or faster depending on its type.
-- Tracking metrics (identity switches, fragmentation) are not measured yet.
+- Tracking is scored on the same three pedestrian sequences only; vehicle tracks are not measured.
 
-## 5. How to reproduce
+## 6. How to reproduce
 
 ```bash
 cd ml-service && source .venv/bin/activate
@@ -100,4 +117,6 @@ python -m app.evaluation ../data/datasets/MOT17/train/MOT17-{02,04,09}-FRCNN --s
 python -m app.evaluation ../data/datasets/MOT17/train/MOT17-{02,04,09}-FRCNN --stride 10 --imgsz 1280
 python -m app.make_video ../data/datasets/MOT17/train/MOT17-09-FRCNN ../data/samples/MOT17-09.mp4
 python -m app.cli ../data/samples/MOT17-09.mp4 --zone "0.0,0.6 0.5,0.6 0.5,1.0 0.0,1.0" --loiter 5
+pip install -r requirements-eval.txt
+python -m app.track_eval ../data/datasets/MOT17/train/MOT17-{02,04,09}-FRCNN --stride 3
 ```

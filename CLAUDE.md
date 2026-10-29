@@ -36,6 +36,7 @@ pip install -r requirements-ml.txt             # adds Ultralytics and PyTorch (s
 pip install -r requirements-dev.txt && python -m pytest -q   # tests stub the model; no PyTorch needed
 python -m app.cli ../data/samples/clip.mp4 --zone "0.1,0.5 0.6,0.5 0.6,0.95 0.1,0.95" --loiter 10
 python -m app.evaluation ../data/datasets/MOT17/train/MOT17-09-FRCNN   # person precision/recall
+pip install -r requirements-eval.txt && python -m app.track_eval ../data/datasets/MOT17/train/MOT17-{02,04,09}-FRCNN  # MOTA/IDF1
 uvicorn app.main:app --reload --port 8000
 
 # Everything with Postgres
@@ -52,52 +53,53 @@ docker compose up --build
 - Detection uses pretrained YOLOv8n; tracking uses Ultralytics' built-in ByteTrack (BoT-SORT as fallback). This replaces DeepSORT from the charter.
 - No facial recognition, ever. Only public, licensed or consenting footage.
 
-## Current state (as of 2026-10-08)
+## Current state (as of 2026-10-29)
 
 Done: charter, plan, requirements, dataset selection, architecture, database design, OpenAPI contract, technology decisions, project scaffold, CI workflow, Flyway baseline schema, authentication and access control.
 
 Backend (packages under `com.cctv.platform`):
 - Schema: Flyway `V1__baseline_schema.sql` creates all 9 tables; Hibernate runs with `ddl-auto: validate`. Every table has an entity.
 - `auth`: login and `/api/auth/me`, HS256 JWT via Spring Security resource server (60 min), BCrypt, failed-login limit (5 per email per 15 min, in memory), bootstrap admin from `ADMIN_EMAIL`/`ADMIN_PASSWORD`. Controllers receive the caller as a `CurrentUser` parameter. Role checks use `@PreAuthorize`; camera access is checked in `CameraService` (unassigned cameras return 404). `/internal/**` has its own filter chain (`ServiceTokenFilter`, constant-time compare of `X-Service-Token`); user JWTs are not accepted there.
-- `user`: admin endpoints list, create, patch (last active admin rule), replace camera access.
-- `camera`: list (filtered by access), get, create. PUT and DELETE from the contract are **not implemented**. `CameraService.getVisible` is the access check reused by videos, jobs, events, zones and rules.
+- `user`: admin endpoints list, create, patch (last active admin rule), get and replace camera access.
+- `camera`: list (filtered by access), get, create, update, delete. Delete with footage needs `deleteFootage=true` and goes through `video/CameraDeletionService` (avoids a CameraService/VideoService cycle). `CameraService.getVisible` is the access check reused by videos, jobs, events, zones and rules.
 - `zone`: zones and event rules, admin create/delete (rules also update), operators read. Validation mirrors `ml-service/app/models.py`.
-- `storage`: `VideoStorage` interface, `LocalVideoStorage` (`app.storage.local-dir`, env `STORAGE_DIR`, default `../data/storage`, shared with the detection service). No S3 yet.
+- `storage`: `VideoStorage` interface (store, exists, delete, `signedUrl`), `LocalVideoStorage` (`app.storage.local-dir`, env `STORAGE_DIR`, default `../data/storage`, shared with the detection service), `LinkSigner` (HMAC-SHA256, `STORAGE_SIGNING_SECRET`), `MediaController` (`GET /api/media?key&expires&sig`, permitAll, signature is the auth, 403 for every failure, range requests), `StorageKeys.isSafe`. Link TTL `app.storage.link-ttl` 5m. No S3 yet.
 - `video`: upload (`.mp4` name, `ftyp` content check, `app.upload.max-bytes` 500 MB, generated keys `videos/{camera}/{yyyy}/{MM}/{uuid}.mp4`), get, admin delete (removes jobs, events and files).
 - `job`: `ProcessingJob`, `DetectionClient` (POST /jobs, `app.detection.*`, env `DETECTION_URL`, `SERVICE_TOKEN`), `JobService` (dispatch after commit, FAILED if unreachable; callbacks validate events, replace on resend, DONE). `InternalJobController` serves `/internal/jobs/{id}/status|events`.
-- `event`: search with filters and sort whitelist, limited to visible cameras; detail. Both audited. Clip and thumbnail endpoints are **not implemented** (no clips yet).
+- `event`: search with filters and sort whitelist, limited to visible cameras; detail; `/clip` and `/thumbnail` redirect (302) to signed links. Search, detail and clip views are audited.
 - `audit`: `AuditService.record(...)` for every security-relevant action; admin search at `/api/audit-logs`. Add new actions to `AuditAction` and to the description in `openapi.yaml`.
 - `common`: `ApiException` and RFC 7807 problem responses.
-- Tests: `SchemaMigrationTests`, `AuthAndAccessTests` (MockMvc), `AuthPropertiesTests`.
+- Tests: `SchemaMigrationTests`, `AuthAndAccessTests`, `ProcessingFlowTests` (upload, callbacks, search, media links, camera delete), `AuthPropertiesTests`. 59 total.
 
 Detection service (`ml-service/app`):
 - `models.py`: job request and event shapes from the contract, with validation (zones 0..1, rule params, storage keys that cannot escape `STORAGE_DIR`).
 - `events.py`: pure-Python event building and the three rules. Design details are in `docs/03-architecture.md` section 5.
 - `detector.py`: YOLOv8 plus ByteTrack over a video with OpenCV, every Nth frame; lazy imports.
 - `jobs.py` and `main.py`: `POST /jobs` (requires `X-Service-Token`, fails closed if `SERVICE_TOKEN` is unset), one background worker, callbacks to the API's `/internal/jobs/...`. Env: `SERVICE_TOKEN`, `API_BASE_URL`, `STORAGE_DIR`.
-- `cli.py` (run the pipeline on a file), `evaluation.py` (MOT17 person precision/recall), `make_video.py` (MOT image sequence to .mp4).
-- Not done: thumbnails and clips, S3.
+- `media.py`: one extra pass writes a thumbnail (best frame) and a clip (event ±2 s, max 30 s, 640 px, ~15 fps, box drawn) per event; H.264 MP4 if OpenCV can encode it, else VP8 WebM. Failure is logged and events are sent without media. Env `MEDIA=off`, `CLIP_WIDTH`, `CLIP_MAX_SECONDS`.
+- `cli.py` (run the pipeline on a file), `evaluation.py` (MOT17 person precision/recall), `track_eval.py` (MOTA/IDF1 via motmetrics, `requirements-eval.txt`), `make_video.py` (MOT image sequence to .mp4).
+- Not done: S3.
 
-Frontend: login screen, token in `sessionStorage`, camera list; add-camera form only for admins. Clicking a camera opens `CameraDetail.tsx`: upload form, job status polling, paged event table with a type filter. `src/api.ts` wraps fetch with the token and problem-error handling. No screens yet for users, zones or rules (API only).
+Frontend: login screen, token in `sessionStorage`. Admins get a nav: Cameras, Users (`UsersPage.tsx`: create, role, enable/disable, camera access), Audit log (`AuditPage.tsx`). Clicking a camera opens `CameraDetail.tsx`: upload form, job status polling, paged event table with a type filter and a Play button opening `EventPanel.tsx` (clip and thumbnail). Admins also see `CameraAdmin.tsx`: edit/delete camera, zone editor (click points on a recent thumbnail), rules. `src/api.ts` wraps fetch; `mediaUrl()` follows the clip/thumbnail redirect to get the signed link.
 
 Dev logins: `admin@cctv.local` / `admin-dev-password` (dev profile and docker-compose only).
 
 Verified working: backend build and 51 tests (JDK 21) on H2 and on a real PostgreSQL; full upload-to-event flow with the real backend and real detection service on MOT17-09 (upload, dispatch, 55 events stored with absolute times, search, audit), done 2026-10-15; frontend build. The user confirmed the camera page displays correctly in a browser (before login was added).
-ML service: 37 pytest tests pass with the model stubbed. Heavy deps installed locally (`ml-service/.venv`, Python 3.13). Real detection verified on MOT17: person precision 0.934, recall 0.427 (`docs/06-detection-baseline.md`); `/jobs` verified end to end against a stand-in API. The Dockerfile (CPU-only torch, baked weights, non-root) has not been built.
-**Not yet verified:** `docker compose`, the login, upload and event screens in a browser, the CI run on GitHub.
+ML service: 45 pytest tests pass (media and track-eval tests skip without OpenCV/NumPy, so CI runs 37). Heavy deps installed locally (`ml-service/.venv`, Python 3.13). Real detection verified on MOT17: person precision 0.934, recall 0.427 (`docs/06-detection-baseline.md`); `/jobs` verified end to end against a stand-in API. The Dockerfile (CPU-only torch, baked weights, non-root) has not been built.
+Sprint 2 (2026-10-29): full flow including clips verified through the Vite proxy (38 events, all with clip and thumbnail, signed links, range requests, forged link refused). Tracking quality measured (docs/06 section 4).
+**Not yet verified:** `docker compose` (Docker Desktop was not running), the Sprint 2 screens (users, audit log, zone editor, rules, clip playback) in a browser.
 
 Local machine note: `~/.zshrc` pins `JAVA_HOME` to JDK 17. Build the backend with `JAVA_HOME=$(/usr/libexec/java_home -v 21) mvn -B verify` unless the user has changed that.
 
 Data: `data/` is git-ignored. MOT17 is downloaded: `data/datasets/MOT17.zip` (5.9 GB) with the train FRCNN sequences extracted to `data/datasets/MOT17/train/`. Static-camera sequences: 02, 04, 09. Sample video: `data/samples/MOT17-09.mp4`. MOT17 is CC BY-NC-SA 3.0.
-No Week 3 report draft exists in `docs/weekly-reports/` (Flyway and auth were done that week).
+Week numbering: Week 1 ended 4 Oct, so Week 3 = 12–18 Oct, Week 5 = 26 Oct–1 Nov. Sprint 1 = Weeks 1–3. No commits were made in Week 4 (19–25 Oct).
 
 ## Next steps (plan: Week 4 detection, Week 5 tracking and rules, Weeks 6 and 7 backend and integration)
 
 1. Still open from Week 3: AWS account and "hello world" deployment (needs the user's account).
-2. Thumbnails and clips in the detection service, plus the clip and thumbnail endpoints.
-3. Admin screens for zones (drawing polygons), rules, users and camera access.
-4. Record demo clips with consenting people.
-5. Camera PUT/DELETE and admin screens for users and camera access in the dashboard.
+2. S3 storage with encryption and presigned URLs (implement `VideoStorage` for S3).
+3. Run `docker compose up --build` once Docker Desktop is running.
+4. Record demo clips with consenting people; build the vehicle evaluation set.
 
 ## Conventions
 

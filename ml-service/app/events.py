@@ -147,4 +147,5 @@ def _event(event_type: str, label: str, track_id: int, span: list[Observation],
         bbox=best.bbox(),
         zoneId=zone_id,
         ruleId=rule_id,
+        bestOffsetMs=best.offset_ms,
     )
