@@ -1,5 +1,6 @@
 package com.cctv.platform.storage;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -19,6 +20,7 @@ import java.util.Optional;
  * same folder (its {@code STORAGE_DIR}), standing in for the shared S3 bucket. Signed links
  * point to {@link MediaController}.
  */
+@ConditionalOnProperty(name = "app.storage.type", havingValue = "local", matchIfMissing = true)
 @Component
 public class LocalVideoStorage implements VideoStorage {
 

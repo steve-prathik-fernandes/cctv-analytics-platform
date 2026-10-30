@@ -523,8 +523,21 @@ paths:
     get:
       tags: [Events]
       summary: Play the event clip (operator)
-      description: Redirects to a short-lived signed link. The view is written to the audit log.
+      description: |
+        Redirects to a short-lived signed link, or returns it as JSON with redirect=false. The
+        link is to the API's /api/media with local storage, or an S3 presigned URL on AWS. The
+        view is written to the audit log.
+      parameters:
+        - name: redirect
+          in: query
+          schema: { type: boolean, default: true }
+          description: false returns the link as JSON instead of redirecting. The dashboard uses this, because on AWS the link points to S3 and a script cannot follow a cross-origin redirect.
       responses:
+        '200':
+          description: The signed link (redirect=false)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MediaLink' }
         '302':
           description: Redirect to the signed clip link
           headers:
@@ -540,8 +553,18 @@ paths:
     get:
       tags: [Events]
       summary: Get the event thumbnail (operator)
-      description: 404 when the event has no thumbnail, for example when media rendering failed.
+      description: Same link options as the clip. 404 when the event has no thumbnail, for example when media rendering failed.
+      parameters:
+        - name: redirect
+          in: query
+          schema: { type: boolean, default: true }
+          description: false returns the link as JSON instead of redirecting. The dashboard uses this, because on AWS the link points to S3 and a script cannot follow a cross-origin redirect.
       responses:
+        '200':
+          description: The signed link (redirect=false)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MediaLink' }
         '302':
           description: Redirect to the signed thumbnail link
           headers:
@@ -560,8 +583,8 @@ paths:
         signature is the authorization, so no bearer token is needed and browsers can load it
         in <img> and <video>. Links expire after app.storage.link-ttl (5 minutes). Supports
         HTTP range requests for seeking. Every failure (bad signature, expired, missing file)
-        returns 403 so the endpoint reveals nothing about which files exist. On AWS, S3
-        presigned URLs replace this endpoint.
+        returns 403 so the endpoint reveals nothing about which files exist. With
+        app.storage.type=s3 this endpoint does not exist; S3 presigned URLs replace it.
       security: []
       parameters:
         - { name: key, in: query, required: true, schema: { type: string } }
@@ -735,6 +758,12 @@ components:
           schema: { $ref: '#/components/schemas/Problem' }
 
   schemas:
+    MediaLink:
+      type: object
+      required: [url, expiresAt]
+      properties:
+        url: { type: string, description: 'Signed link; relative (/api/media?...) with local storage, absolute S3 URL on AWS' }
+        expiresAt: { type: string, format: date-time }
     Problem:
       type: object
       properties:

@@ -1,7 +1,8 @@
 """Background processing of jobs submitted by the API (POST /jobs).
 
-Flow (docs/03-architecture.md, section 3): report RUNNING, read the video, detect and track,
-build events, then post the events back to the API, which marks the job DONE. Any failure is
+Flow (docs/03-architecture.md, section 3): report RUNNING, read the video from storage, detect
+and track, build events, write clips and thumbnails to storage, then post the events back to the
+API, which marks the job DONE. Any failure is
 reported as FAILED with a short reason.
 """
 import logging
@@ -11,7 +12,7 @@ from pathlib import Path
 
 import httpx
 
-from . import detector, media
+from . import detector, media, storage
 from .events import build_events
 from .models import JobRequest
 
@@ -32,21 +33,8 @@ class Settings:
     def api_base_url(self) -> str:
         return os.environ.get("API_BASE_URL", "http://localhost:8080").rstrip("/")
 
-    @property
-    def storage_dir(self) -> Path:
-        return Path(os.environ.get("STORAGE_DIR", "../data/storage")).resolve()
-
 
 settings = Settings()
-
-
-def resolve_video(key: str) -> Path:
-    """Maps a storage key to a file under STORAGE_DIR, refusing anything outside it."""
-    root = settings.storage_dir
-    path = (root / key).resolve()
-    if not path.is_relative_to(root):
-        raise ValueError("storage key points outside the storage folder")
-    return path
 
 
 def submit(job: JobRequest) -> None:
@@ -57,12 +45,11 @@ def run(job: JobRequest) -> None:
     client = ApiClient()
     try:
         client.status(job.jobId, "RUNNING")
-        path = resolve_video(job.videoKey)
-        if not path.is_file():
-            raise FileNotFoundError("video not found in storage")
-        result = detector.track_video(path, job.frameStride, job.minConfidence)
-        events = build_events(result.observations, job)
-        events = _with_media(job, path, events, result.observations)
+        store = storage.from_env()
+        with store.video(job.videoKey) as path:
+            result = detector.track_video(path, job.frameStride, job.minConfidence)
+            events = build_events(result.observations, job)
+            events = _with_media(job, store, path, events, result.observations)
         client.events(job.jobId, [e.model_dump(mode="json") for e in events])
         log.info("Job %d done: %d events", job.jobId, len(events))
     except Exception as exc:  # report every failure back, never leave a job RUNNING
@@ -73,14 +60,17 @@ def run(job: JobRequest) -> None:
             log.exception("Could not report failure of job %d", job.jobId)
 
 
-def _with_media(job: JobRequest, path: Path, events, observations):
+def _with_media(job: JobRequest, store, path: Path, events, observations):
     """Adds thumbnails and clips. A media failure is logged, never fails the job: the events
     are still worth having without their clips."""
     if os.environ.get("MEDIA", "on").lower() == "off":
         return events
     try:
-        return media.render(path, events, observations, settings.storage_dir, (job.cameraId, job.jobId),
-                            media.MediaSettings.from_env())
+        with store.media_dir() as root:
+            with_media = media.render(path, events, observations, root, (job.cameraId, job.jobId),
+                                      media.MediaSettings.from_env())
+            store.publish(root, [k for e in with_media for k in (e.clipKey, e.thumbnailKey) if k])
+        return with_media
     except Exception:
         log.exception("Media for job %d failed; sending events without clips", job.jobId)
         return events

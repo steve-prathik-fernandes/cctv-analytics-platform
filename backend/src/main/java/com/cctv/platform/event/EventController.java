@@ -14,11 +14,14 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
+import java.net.URI;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -43,14 +46,16 @@ public class EventController {
     private final AuditService audit;
     private final VideoStorage storage;
     private final Duration linkTtl;
+    private final Clock clock;
 
     public EventController(EventRepository events, CameraService cameras, AuditService audit, VideoStorage storage,
-                           @Value("${app.storage.link-ttl}") Duration linkTtl) {
+                           @Value("${app.storage.link-ttl}") Duration linkTtl, Clock clock) {
         this.events = events;
         this.cameras = cameras;
         this.audit = audit;
         this.storage = storage;
         this.linkTtl = linkTtl;
+        this.clock = clock;
     }
 
     public record EventResponse(Long id, Long cameraId, Long videoId, Long jobId, Event.Type eventType,
@@ -129,24 +134,40 @@ public class EventController {
         return EventResponse.of(event);
     }
 
-    /** Redirects to a short-lived signed link to the event's clip. The view is audited. */
+    /** A short-lived signed link to the event's clip; see {@link #link}. The view is audited. */
     @GetMapping("/{eventId}/clip")
     @Transactional
-    public ResponseEntity<Void> clip(@PathVariable long eventId, CurrentUser user) {
+    public ResponseEntity<?> clip(@PathVariable long eventId, CurrentUser user,
+                                  @RequestParam(defaultValue = "true") boolean redirect) {
         Event event = visible(eventId, user);
         if (event.getClipKey() == null) throw ApiException.notFound("This event has no clip.");
         audit.record(user.id(), AuditAction.CLIP_VIEW, "event", eventId, null);
-        return ResponseEntity.status(HttpStatus.FOUND).location(storage.signedUrl(event.getClipKey(), linkTtl)).build();
+        return link(event.getClipKey(), redirect);
     }
 
-    /** Redirects to a short-lived signed link to the event's thumbnail. */
+    /** A short-lived signed link to the event's thumbnail; see {@link #link}. */
     @GetMapping("/{eventId}/thumbnail")
     @Transactional(readOnly = true)
-    public ResponseEntity<Void> thumbnail(@PathVariable long eventId, CurrentUser user) {
+    public ResponseEntity<?> thumbnail(@PathVariable long eventId, CurrentUser user,
+                                       @RequestParam(defaultValue = "true") boolean redirect) {
         Event event = visible(eventId, user);
         if (event.getThumbnailKey() == null) throw ApiException.notFound("This event has no thumbnail.");
-        return ResponseEntity.status(HttpStatus.FOUND)
-                .location(storage.signedUrl(event.getThumbnailKey(), linkTtl)).build();
+        return link(event.getThumbnailKey(), redirect);
+    }
+
+    public record MediaLink(String url, Instant expiresAt) {
+    }
+
+    /**
+     * A redirect to the signed link, or with {@code redirect=false} the link as JSON. The
+     * dashboard uses JSON: on AWS the link points to S3, another origin, and a script cannot
+     * follow a cross-origin redirect without CORS rules on the bucket.
+     */
+    private ResponseEntity<?> link(String key, boolean redirect) {
+        URI url = storage.signedUrl(key, linkTtl);
+        if (redirect) return ResponseEntity.status(HttpStatus.FOUND).location(url).build();
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(new MediaLink(url.toString(), clock.instant().plus(linkTtl)));
     }
 
     /** The event if the caller may see its camera; otherwise not found, as for other cameras. */

@@ -23,6 +23,7 @@ services:
       SERVICE_TOKEN: ${SERVICE_TOKEN:-local-compose-only-service-token-0123456789}
       STORAGE_SIGNING_SECRET: ${STORAGE_SIGNING_SECRET:-local-compose-only-signing-secret-0123456789}
       DETECTION_URL: http://ml-service:8000
+      STORAGE_TYPE: local
       STORAGE_DIR: /data/storage
     volumes:
       - storage:/data/storage
@@ -36,6 +37,7 @@ services:
     environment:
       SERVICE_TOKEN: ${SERVICE_TOKEN:-local-compose-only-service-token-0123456789}
       API_BASE_URL: http://backend:8080
+      STORAGE_TYPE: local
       STORAGE_DIR: /data/storage
     volumes:
       # Shared with the backend, standing in for the S3 bucket.

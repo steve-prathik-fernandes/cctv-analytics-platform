@@ -47,6 +47,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -400,6 +401,24 @@ class ProcessingFlowTests {
         mvc.perform(get(java.net.URI.create(location)))
                 .andExpect(status().isOk())
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().contentType("image/jpeg"));
+    }
+
+    @Test
+    void linkCanBeReturnedAsJsonInsteadOfARedirect() throws Exception {
+        long eventId = eventWithMedia();
+        String body = mvc.perform(get("/api/events/" + eventId + "/clip?redirect=false").header("Authorization", bearer(operator)))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.expiresAt").exists())
+                .andReturn().getResponse().getContentAsString();
+        String url = json.readTree(body).get("url").asText();
+        assertThat(url).startsWith("/api/media?key=clips/");
+        assertThat(lastAuditAction()).isEqualTo("CLIP_VIEW");
+        mvc.perform(get(java.net.URI.create(url))).andExpect(status().isOk());
+
+        mvc.perform(get("/api/events/" + eventId + "/thumbnail?redirect=false").header("Authorization", bearer(operator)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.url").value(org.hamcrest.Matchers.startsWith("/api/media?key=thumbnails/")));
     }
 
     @Test

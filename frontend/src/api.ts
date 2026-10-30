@@ -91,22 +91,11 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 /**
  * Resolves a clip or thumbnail endpoint to its short-lived signed link, which <img> and
- * <video> can load without the login token. The API answers with a redirect; fetch follows it,
- * so the final URL is the signed link. The body is not needed and is cancelled.
+ * <video> can load without the login token. The link is requested as JSON rather than by
+ * following the redirect: on AWS it points to S3, and the browser will not let a script follow
+ * a redirect to another origin.
  */
 export async function mediaUrl(path: string): Promise<string> {
-  const token = getToken()
-  let res: Response
-  try {
-    res = await fetch(path, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
-  } catch {
-    throw new ApiError(0, 'Backend not reachable. Is it running on port 8080?')
-  }
-  if (res.status === 401 && token) {
-    setToken(null)
-    onUnauthorized()
-  }
-  if (!res.ok) throw new ApiError(res.status, res.status === 404 ? 'Not available for this event' : `Request failed (${res.status})`)
-  res.body?.cancel()
-  return res.url
+  const { url } = await api<{ url: string; expiresAt: string }>(`${path}?redirect=false`)
+  return url
 }

@@ -34,11 +34,22 @@ app:
       password: ${ADMIN_PASSWORD:}
 
   storage:
-    # Local folder standing in for S3. The detection service reads the same folder (STORAGE_DIR).
+    # local: a folder shared with the detection service (development, Docker Compose).
+    # s3: a private bucket with server-side encryption (AWS). The detection service must match.
+    type: ${STORAGE_TYPE:local}
+    # Local storage only. The detection service reads the same folder (STORAGE_DIR).
     local-dir: ${STORAGE_DIR:../data/storage}
-    # Signs short-lived media links. No default: the API will not start without one.
+    # Local storage only: signs short-lived media links. No default: with type local the API
+    # will not start without one.
     signing-secret: ${STORAGE_SIGNING_SECRET}
     link-ttl: 5m
+    s3:
+      bucket: ${S3_BUCKET:}
+      region: ${AWS_REGION:us-east-1}
+      # Optional. Set to use SSE-KMS with this key; empty means SSE-S3 (AES-256).
+      kms-key-id: ${S3_KMS_KEY_ID:}
+      # Optional. Only for an S3-compatible test server such as MinIO.
+      endpoint: ${S3_ENDPOINT:}
   upload:
     max-bytes: 524288000   # 500 MB
   detection:

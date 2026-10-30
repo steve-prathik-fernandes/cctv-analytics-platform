@@ -162,10 +162,27 @@ Final choices are confirmed in Week 3 once cloud credits are known.
 
 Local development uses `docker-compose.yml` for PostgreSQL, the API and the detection service, with a local folder standing in for S3.
 
+### Storage modes
+
+Both the API and the detection service choose storage with `STORAGE_TYPE`, and the two must match.
+
+| | `local` (development, Docker Compose) | `s3` (AWS) |
+|---|---|---|
+| API | `LocalVideoStorage`: files under `STORAGE_DIR` | `S3VideoStorage`: objects in `S3_BUCKET` |
+| Detection service | Reads the video and writes media in the shared folder | Downloads the video to a temporary folder, renders media there, uploads it, removes the folder |
+| Encryption at rest | None (developer machine) | Every object is written with SSE-S3 (AES-256), or SSE-KMS when `S3_KMS_KEY_ID` is set |
+| Signed links | HMAC-signed links to the API's `/api/media` (`LinkSigner`, `STORAGE_SIGNING_SECRET`) | S3 presigned GET URLs; `/api/media` is not registered |
+| Credentials | None | AWS default chain: the ECS task role or EC2 instance role. No keys in configuration |
+
+Links last 5 minutes (`app.storage.link-ttl`) in both modes. The dashboard asks for links as JSON (`?redirect=false`) rather than following the redirect, because a script cannot follow a redirect to S3, which is another origin. Media elements (`<img>`, `<video>`) load the S3 link directly, so the bucket needs no CORS rules.
+
+The bucket should block all public access and have a policy that denies requests without TLS. The API's role needs `s3:PutObject`, `s3:GetObject` and `s3:DeleteObject` on the bucket (and `HeadObject` through `GetObject`); the detection service's role needs `s3:GetObject` on `videos/*` and `s3:PutObject` on `clips/*` and `thumbnails/*`. With SSE-KMS both roles also need `kms:GenerateDataKey` and `kms:Decrypt` on the key.
+
 ## 8. Known gaps
 
 - The upload-to-event flow in section 3 runs end to end on a local machine, including thumbnails, clips and signed links.
-- Storage is a local folder shared by the API and the detection service (`VideoStorage` with `LocalVideoStorage`), standing in for S3. Signed links are HMAC-signed URLs to the API's `/api/media` endpoint, valid for 5 minutes; S3 presigned URLs replace them on AWS. The S3 implementation and encryption at rest are not built.
+- S3 storage is built and unit-tested (a mocked client in the API, an in-memory S3 in the detection service) but has not yet run against a real bucket; that waits for the AWS account. The bucket, its policy and the IAM roles are not created yet.
+- With S3, the API spools each upload to a temporary file before sending it, because S3 needs the length up front. Uploads are capped at 500 MB, so this is bounded, but the API host needs that much free temporary disk per concurrent upload.
 - Clips cost about 0.5 MB per 6 seconds at 640×360 and 15 fps. Clips of overlapping events are stored separately, so a crowded scene stores more clip data than the original video. Width and maximum length are settings (`CLIP_WIDTH`, `CLIP_MAX_SECONDS`).
 - A clip whose signed link expires while it is playing stops loading further parts; reopening the event fetches a new link.
 - Video duration is not read from the file, so `durationSeconds` is always null.

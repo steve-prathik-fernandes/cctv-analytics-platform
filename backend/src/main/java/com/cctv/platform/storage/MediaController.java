@@ -1,5 +1,6 @@
 package com.cctv.platform.storage;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.CacheControl;
@@ -24,6 +25,7 @@ import java.util.Map;
  * presigned URLs take this role and this endpoint is unused. Video supports range requests
  * (seeking) through Spring's {@link Resource} handling.
  */
+@ConditionalOnProperty(name = "app.storage.type", havingValue = "local", matchIfMissing = true)
 @RestController
 public class MediaController {
 

@@ -9,13 +9,14 @@ Week ending: 1 November 2026
 - Clips and thumbnails are served through signed links that expire after 5 minutes; a forged or expired link is refused.
 - Admin screens: user management, camera access, audit log, camera edit and delete, zone drawing on a camera frame, and rules.
 - Tracking quality measured on MOT17: IDF1 50.1% overall and 67.2% on the sequence with larger people. Results in `docs/06-detection-baseline.md`.
-- 104 automated tests (59 backend, 45 detection service).
+- S3 storage for the cloud deployment: the API and the detection service can now use a private S3 bucket instead of the local folder, with every object encrypted at rest and media served through S3 presigned links that expire after 5 minutes. Tested without an AWS account (mocked and in-memory S3).
+- 126 automated tests (69 backend, 57 detection service).
 
 **Blockers**
 - AWS account still not set up, so the cloud deployment carries over again.
 - Docker Desktop was not running, so the Docker Compose run is not yet checked.
 
 **Next week**
-- Set up AWS and deploy; add S3 storage with encryption.
+- Set up AWS, create the bucket and roles, and deploy; run the S3 storage against the real bucket.
 - Run the full system with Docker Compose.
 - Record demo clips and build the vehicle evaluation set.

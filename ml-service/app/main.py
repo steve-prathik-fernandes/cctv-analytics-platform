@@ -14,7 +14,7 @@ import logging
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile, status
 
-from . import jobs
+from . import jobs, storage
 from .detector import TARGET_CLASSES, DependencyMissing, load_model
 from .models import JobRequest
 
@@ -53,7 +53,7 @@ def health():
 def submit_job(job: JobRequest):
     """Accepts a job and processes it in the background. Results go to the API's /internal endpoints."""
     try:
-        jobs.resolve_video(job.videoKey)
+        storage.check_key(job.videoKey)
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     jobs.submit(job)

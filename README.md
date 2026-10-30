@@ -34,8 +34,14 @@ Outside the dev profile the backend needs these environment variables:
 | `DB_URL`, `DB_USER`, `DB_PASSWORD` | PostgreSQL connection. |
 | `SERVICE_TOKEN` | Shared secret between the backend and the detection service, at least 32 characters. Set the same value on both. |
 | `DETECTION_URL` | Detection service address (default `http://localhost:8000`). |
-| `STORAGE_DIR` | Folder for uploaded footage, clips and thumbnails (default `../data/storage`). The detection service must see the same folder. |
-| `STORAGE_SIGNING_SECRET` | Signs the short-lived links used to play clips and show thumbnails, at least 32 characters. |
+| `STORAGE_TYPE` | `local` (default) or `s3`. Set the same value on the detection service. |
+| `STORAGE_DIR` | Local storage: folder for uploaded footage, clips and thumbnails (default `../data/storage`). The detection service must see the same folder. |
+| `STORAGE_SIGNING_SECRET` | Local storage: signs the short-lived links used to play clips and show thumbnails, at least 32 characters. Not used with S3. |
+| `S3_BUCKET`, `AWS_REGION` | S3 storage: the private bucket and its region. Credentials come from the AWS default chain (the task or instance role on AWS), never from a file in the repository. |
+| `S3_KMS_KEY_ID` | S3 storage, optional: encrypt with this KMS key (SSE-KMS). Without it objects use SSE-S3 (AES-256). |
+| `S3_ENDPOINT` | Optional: an S3-compatible server such as MinIO, for testing only. |
+
+The detection service reads `STORAGE_TYPE`, `STORAGE_DIR`, `S3_BUCKET`, `AWS_REGION`, `S3_KMS_KEY_ID` and `S3_ENDPOINT` with the same meanings.
 
 **Processing footage locally** needs the detection service running with the same token and folder as the dev backend:
 

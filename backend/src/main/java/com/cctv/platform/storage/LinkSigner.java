@@ -1,5 +1,6 @@
 package com.cctv.platform.storage;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -16,6 +17,7 @@ import java.util.Base64;
  * Signs and checks short-lived media links for {@link LocalVideoStorage}: HMAC-SHA256 over the
  * key and its expiry time. This stands in for S3's presigned URLs, which replace it on AWS.
  */
+@ConditionalOnProperty(name = "app.storage.type", havingValue = "local", matchIfMissing = true)
 @Component
 public class LinkSigner {
 
